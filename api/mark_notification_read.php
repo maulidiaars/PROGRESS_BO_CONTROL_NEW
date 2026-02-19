@@ -3,6 +3,7 @@ session_start();
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/week_logic.php';
 
 $response = ['success' => false, 'message' => ''];
 
@@ -29,6 +30,22 @@ if (!$conn) {
 }
 
 try {
+    // CEK APAKAH NOTIFIKASI INI MASIH DALAM MINGGU INI ATAU TIDAK
+    $weekInfo = getCurrentWeekInfo();
+    $weekStart = $weekInfo['start_date'];
+    
+    $checkSql = "SELECT DATE FROM T_INFORMATION WHERE ID_INFORMATION = ?";
+    $checkStmt = sqlsrv_query($conn, $checkSql, [$notificationId]);
+    $isOldNotification = false;
+    
+    if ($checkStmt) {
+        $info = sqlsrv_fetch_array($checkStmt, SQLSRV_FETCH_ASSOC);
+        if ($info && isset($info['DATE']) && $info['DATE'] < $weekStart) {
+            $isOldNotification = true;
+        }
+        sqlsrv_free_stmt($checkStmt);
+    }
+    
     // Cek apakah sudah ada record untuk user ini
     $check_sql = "SELECT id FROM user_notification_read 
                   WHERE user_id = ? AND notification_id = ?";
@@ -45,6 +62,7 @@ try {
             if ($update_stmt) {
                 $response['success'] = true;
                 $response['message'] = 'Updated existing record';
+                $response['is_old'] = $isOldNotification;
             }
         } else {
             // Insert new
@@ -56,6 +74,7 @@ try {
             if ($insert_stmt) {
                 $response['success'] = true;
                 $response['message'] = 'Created new record';
+                $response['is_old'] = $isOldNotification;
             }
         }
         

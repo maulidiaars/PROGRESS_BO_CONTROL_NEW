@@ -8,12 +8,76 @@ if (!$conn) {
 }
 
 $date = $_GET['date'] ?? date('Ymd');
-$shift = $_GET['shift'] ?? 'DS'; // DS or NS
+$shift = $_GET['shift'] ?? 'DS';
 
 try {
     $data = [];
     
-    // STEP 1: Ambil semua data untuk hari ini
+    // ✅ STEP 1: Hitung TARGET per jam dari ETA + ADD ORDER!
+    $targetPerHour = [];
+    
+    if ($shift === 'DS') {
+        for ($hour = 7; $hour <= 20; $hour++) {
+            $targetPerHour[$hour] = 0;
+        }
+    } else {
+        for ($hour = 21; $hour <= 23; $hour++) $targetPerHour[$hour] = 0;
+        for ($hour = 0; $hour <= 6; $hour++) $targetPerHour[$hour] = 0;
+    }
+    
+    // Ambil target dari ETA (REGULER ORDER)
+    $sqlTargetETA = "
+    SELECT 
+        TRY_CAST(LEFT(ETA, 2) AS INT) as HOUR,
+        SUM(ORD_QTY) as TOTAL_ORDER
+    FROM T_ORDER
+    WHERE DELV_DATE = ?
+        AND ETA IS NOT NULL 
+        AND ETA != ''
+        AND TRY_CAST(LEFT(ETA, 2) AS INT) IS NOT NULL
+    ";
+    
+    if ($shift === 'DS') {
+        $sqlTargetETA .= " AND TRY_CAST(LEFT(ETA, 2) AS INT) BETWEEN 7 AND 20";
+    } else {
+        $sqlTargetETA .= " AND (TRY_CAST(LEFT(ETA, 2) AS INT) >= 21 OR TRY_CAST(LEFT(ETA, 2) AS INT) BETWEEN 0 AND 6)";
+    }
+    
+    $sqlTargetETA .= " GROUP BY TRY_CAST(LEFT(ETA, 2) AS INT)";
+    
+    $stmtTarget = sqlsrv_query($conn, $sqlTargetETA, [$date]);
+    if ($stmtTarget) {
+        while ($row = sqlsrv_fetch_array($stmtTarget, SQLSRV_FETCH_ASSOC)) {
+            $hour = (int)$row['HOUR'];
+            if (isset($targetPerHour[$hour])) {
+                $targetPerHour[$hour] += (int)$row['TOTAL_ORDER'];
+            }
+        }
+        sqlsrv_free_stmt($stmtTarget);
+    }
+    
+    // ✅ TAMBAH ADD ORDER DISTRIBUTION!
+    $sqlAddOrder = "
+    SELECT HOUR, SUM(QUANTITY) as ADD_QTY
+    FROM T_ADD_ORDER_DISTRIBUTION
+    WHERE DATE = ? AND TYPE = ?
+    GROUP BY HOUR
+    ";
+    
+    $shiftType = $shift === 'DS' ? 'DS' : 'NS';
+    $stmtAdd = sqlsrv_query($conn, $sqlAddOrder, [$date, $shiftType]);
+    
+    if ($stmtAdd) {
+        while ($row = sqlsrv_fetch_array($stmtAdd, SQLSRV_FETCH_ASSOC)) {
+            $hour = (int)$row['HOUR'];
+            if (isset($targetPerHour[$hour])) {
+                $targetPerHour[$hour] += (int)$row['ADD_QTY']; // ✅ NAMBAH ADD ORDER!
+            }
+        }
+        sqlsrv_free_stmt($stmtAdd);
+    }
+    
+    // ✅ STEP 2: Ambil semua incoming untuk hari ini (PURE DARI BO)
     $allData = [];
     $sqlAll = "SELECT PART_NO, HOUR, TRAN_QTY FROM T_UPDATE_BO WHERE DATE = ? ORDER BY PART_NO, HOUR";
     $stmtAll = sqlsrv_query($conn, $sqlAll, [$date]);
@@ -32,22 +96,19 @@ try {
         sqlsrv_free_stmt($stmtAll);
     }
     
+    // ✅ STEP 3: Hitung incoming kumulatif per jam (PAKAI SELISIH!)
     if ($shift === 'DS') {
-        // Day shift hours: 7-20
-        $cumulativeTotal = 0;
+        $cumulativeIncoming = 0;
         
         for ($hour = 7; $hour <= 20; $hour++) {
             $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            $hourlyIncrement = 0;
+            $hourlyIncoming = 0;
             
-            // Untuk tiap part, ambil nilai untuk jam ini (bukan akumulasi)
             foreach ($allData as $partNo => $hourData) {
                 if (isset($hourData[$hour])) {
-                    // Cari nilai TERBARU untuk jam ini
                     $latestQty = $hourData[$hour];
-                    
-                    // Cari nilai SEBELUMNYA untuk hitung increment
                     $prevQty = 0;
+                    
                     for ($h = $hour - 1; $h >= 7; $h--) {
                         if (isset($hourData[$h])) {
                             $prevQty = $hourData[$h];
@@ -55,129 +116,88 @@ try {
                         }
                     }
                     
-                    $hourlyIncrement += max(0, $latestQty - $prevQty);
+                    $hourlyIncoming += max(0, $latestQty - $prevQty);
                 }
             }
             
-            // Tambah ke cumulative
-            $cumulativeTotal += $hourlyIncrement;
+            $cumulativeIncoming += $hourlyIncoming;
+            
+            $cumulativeTarget = 0;
+            for ($h = 7; $h <= $hour; $h++) {
+                $cumulativeTarget += $targetPerHour[$h] ?? 0;
+            }
             
             $data[] = [
                 'hour' => $hourStr,
-                'qty' => $hourlyIncrement, // Increment per jam
-                'cumulative' => $cumulativeTotal // Total akumulasi sampai jam ini
-            ];
-        }
-        
-        echo json_encode($data);
-        
-    } else {
-        // Night shift hours: 21-23 dan 0-6
-        $cumulativeTotal = 0;
-        
-        // Jam 21-23
-        for ($hour = 21; $hour <= 23; $hour++) {
-            $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            
-            $sql = "SELECT ISNULL(SUM(TRAN_QTY), 0) as qty 
-                    FROM T_UPDATE_BO 
-                    WHERE DATE = ? AND HOUR = ?";
-            $stmt = sqlsrv_query($conn, $sql, [$date, $hour]);
-            $row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : ['qty' => 0];
-            $hourlyQty = (int)$row['qty'];
-            
-            $cumulativeTotal += $hourlyQty;
-            
-            $data[] = [
-                'hour' => $hourStr,
-                'qty' => $hourlyQty,
-                'cumulative' => $cumulativeTotal
-            ];
-        }
-        
-        // Jam 0-6
-        for ($hour = 0; $hour <= 6; $hour++) {
-            $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            
-            $sql = "SELECT ISNULL(SUM(TRAN_QTY), 0) as qty 
-                    FROM T_UPDATE_BO 
-                    WHERE DATE = ? AND HOUR = ?";
-            $stmt = sqlsrv_query($conn, $sql, [$date, $hour]);
-            $row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : ['qty' => 0];
-            $hourlyQty = (int)$row['qty'];
-            
-            $cumulativeTotal += $hourlyQty;
-            
-            $data[] = [
-                'hour' => $hourStr,
-                'qty' => $hourlyQty,
-                'cumulative' => $cumulativeTotal
-            ];
-        }
-        
-        echo json_encode($data);
-    }
-    
-} catch (Exception $e) {
-    // FALLBACK ke logic sederhana
-    $data = [];
-    $cumulativeTotal = 0;
-    
-    if ($shift === 'DS') {
-        for ($hour = 7; $hour <= 20; $hour++) {
-            $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            $sql = "SELECT ISNULL(SUM(TRAN_QTY), 0) as qty 
-                    FROM T_UPDATE_BO 
-                    WHERE DATE = ? AND HOUR = ?";
-            $stmt = sqlsrv_query($conn, $sql, [$date, $hour]);
-            $row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : ['qty' => 0];
-            $hourlyQty = (int)$row['qty'];
-            
-            $cumulativeTotal += $hourlyQty;
-            
-            $data[] = [
-                'hour' => $hourStr,
-                'qty' => $hourlyQty,
-                'cumulative' => $cumulativeTotal
+                'incoming' => $hourlyIncoming,           // ✅ PURE dari BO
+                'cumulative_incoming' => $cumulativeIncoming,
+                'target' => $targetPerHour[$hour] ?? 0,  // ✅ SUDAH + ADD ORDER
+                'cumulative_target' => $cumulativeTarget
             ];
         }
     } else {
-        for ($hour = 21; $hour <= 23; $hour++) {
+        // Night shift
+        $cumulativeIncoming = 0;
+        $cumulativeTarget = 0;
+        $nsHours = array_merge(range(21, 23), range(0, 6));
+        sort($nsHours);
+        
+        foreach ($nsHours as $hour) {
             $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            $sql = "SELECT ISNULL(SUM(TRAN_QTY), 0) as qty 
-                    FROM T_UPDATE_BO 
-                    WHERE DATE = ? AND HOUR = ?";
-            $stmt = sqlsrv_query($conn, $sql, [$date, $hour]);
-            $row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : ['qty' => 0];
-            $hourlyQty = (int)$row['qty'];
+            $hourlyIncoming = 0;
             
-            $cumulativeTotal += $hourlyQty;
+            foreach ($allData as $partNo => $hourData) {
+                if (isset($hourData[$hour])) {
+                    $latestQty = $hourData[$hour];
+                    $prevQty = 0;
+                    
+                    // Cari nilai sebelumnya di NS
+                    if ($hour >= 21) {
+                        for ($h = $hour - 1; $h >= 21; $h--) {
+                            if (isset($hourData[$h])) {
+                                $prevQty = $hourData[$h];
+                                break;
+                            }
+                        }
+                    } else {
+                        // Cek di jam 23,22,21 dulu
+                        for ($h = 23; $h >= 21; $h--) {
+                            if (isset($hourData[$h])) {
+                                $prevQty = $hourData[$h];
+                                break;
+                            }
+                        }
+                        // Kalo gak ada, cek jam sebelumnya di 0-6
+                        if ($prevQty == 0) {
+                            for ($h = $hour - 1; $h >= 0; $h--) {
+                                if (isset($hourData[$h])) {
+                                    $prevQty = $hourData[$h];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    $hourlyIncoming += max(0, $latestQty - $prevQty);
+                }
+            }
+            
+            $cumulativeIncoming += $hourlyIncoming;
+            $cumulativeTarget += $targetPerHour[$hour] ?? 0;
             
             $data[] = [
                 'hour' => $hourStr,
-                'qty' => $hourlyQty,
-                'cumulative' => $cumulativeTotal
-            ];
-        }
-        for ($hour = 0; $hour <= 6; $hour++) {
-            $hourStr = str_pad($hour, 2, '0', STR_PAD_LEFT);
-            $sql = "SELECT ISNULL(SUM(TRAN_QTY), 0) as qty 
-                    FROM T_UPDATE_BO 
-                    WHERE DATE = ? AND HOUR = ?";
-            $stmt = sqlsrv_query($conn, $sql, [$date, $hour]);
-            $row = $stmt ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : ['qty' => 0];
-            $hourlyQty = (int)$row['qty'];
-            
-            $cumulativeTotal += $hourlyQty;
-            
-            $data[] = [
-                'hour' => $hourStr,
-                'qty' => $hourlyQty,
-                'cumulative' => $cumulativeTotal
+                'incoming' => $hourlyIncoming,
+                'cumulative_incoming' => $cumulativeIncoming,
+                'target' => $targetPerHour[$hour] ?? 0,
+                'cumulative_target' => $cumulativeTarget
             ];
         }
     }
     
     echo json_encode($data);
+    
+} catch (Exception $e) {
+    echo json_encode(['error' => $e->getMessage()]);
 }
 ?>

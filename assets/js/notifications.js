@@ -1,6 +1,8 @@
-// assets/js/notifications.js - VERSION LENGKAP SATU FILE
+// assets/js/notifications.js - VERSION FIX (NO DUPLICATE INIT)
 class NotificationSystem {
     constructor() {
+        console.log('🔔 NotificationSystem constructor called');
+        
         this.pollingInterval = null;
         this.deepCheckInterval = null;
         this.notificationCount = 0;
@@ -13,17 +15,27 @@ class NotificationSystem {
         this.highlightActive = false;
         this.currentHighlightId = null;
         this.pendingHighlightData = null;
-        this.init();
+        
+        // Panggil init setelah semua property siap
+        setTimeout(() => {
+            this.init();
+        }, 100);
     }
     
     init() {
+        // Cek apakah sudah diinisialisasi
+        if (this.isInitialized) {
+            console.log('🔔 NotificationSystem already initialized, skipping...');
+            return;
+        }
+        
         console.log('🔔 NotificationSystem initialized at', new Date().toLocaleTimeString());
+        
+        // Setup event listeners dulu
+        this.setupEventListeners();
         
         // Force start polling immediately
         this.startPollingImmediately();
-        
-        // Setup event listeners
-        this.setupEventListeners();
         
         // Initial load
         this.loadInitialData();
@@ -31,145 +43,98 @@ class NotificationSystem {
         // Check URL parameter for notification highlight
         this.checkUrlForHighlight();
         
+        // Cek apakah hari ini Senin (client-side)
+        this.checkIfMonday();
+        
         this.isInitialized = true;
     }
     
+    // ==================== FUNGSI SETUP EVENT LISTENERS ====================
     setupEventListeners() {
         console.log('🔔 Setting up event listeners...');
         
-        // Mark all as read
-        $(document).on('click', '#markAllRead', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.markAllAsRead();
-        });
-        
-        // Notification click - REVISED FOR HIGHLIGHT
-        $(document).on('click', '.notification-item', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // Skip jika klik di close button atau link
-            if ($(e.target).closest('.btn-close').length || $(e.target).closest('a').length) {
-                return;
-            }
-            
-            const notificationId = $(e.currentTarget).data('id');
-            const notificationType = $(e.currentTarget).data('type');
-            
-            if (notificationId) {
-                console.log(`🔔 Notification clicked: ${notificationId}, type: ${notificationType}`);
-                
-                // Mark as read first
-                this.markAsRead(notificationId);
-                
-                // Remove unread styling
-                $(e.currentTarget).removeClass('unread');
-                
-                // FORCE close dropdown sebelum scroll
-                $('#notificationDropdown').dropdown('hide');
-                
-                // Delay dikit biar dropdown tertutup dulu
-                setTimeout(() => {
-                    this.scrollToRelatedInformation(notificationId, notificationType);
-                }, 300);
-            }
-        });
-        
-        // Dropdown show event
-        $('#notificationDropdown').on('show.bs.dropdown', () => {
-            console.log('🔔 Dropdown opened, loading notifications...');
+        // Notification dropdown toggle
+        $(document).on('show.bs.dropdown', '#notificationDropdown', () => {
+            console.log('🔔 Notification dropdown opened');
             this.loadNotifications();
         });
         
-        // Listen for page visibility change
+        // Mark all as read button
+        $(document).on('click', '#markAllRead', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔔 Mark all as read clicked');
+            this.markAllAsRead();
+        });
+        
+        // Manual refresh button
+        $(document).on('click', '#refreshNotifications', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('🔔 Manual refresh clicked');
+            this.forceCheck();
+        });
+        
+        // Document visibility change
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) {
                 console.log('🔔 Page became visible, checking notifications...');
-                this.checkNewNotifications(true);
+                this.forceCheck();
             }
         });
         
-        // Listen for focus event
-        window.addEventListener('focus', () => {
-            console.log('🔔 Window focused, checking notifications...');
-            this.checkNewNotifications(true);
-            this.removeAllHighlights();
-        });
+        console.log('🔔 Event listeners setup complete');
+    }
+    
+    // ==================== FUNGSI CEK HARI SENIN ====================
+    checkIfMonday() {
+        const today = new Date();
+        const day = today.getDay(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
         
-        // Custom event untuk trigger manual
-        $(document).on('forceCheckNotifications', () => {
-            console.log('🔔 Force check triggered');
-            this.checkNewNotifications(true);
-        });
-        
-        // Custom event ketika data tabel selesai di-load
-        $(document).on('informationTableLoaded', (event, data) => {
-            console.log('📋 Information table loaded, checking for pending highlights...');
-            if (this.currentHighlightId) {
-                setTimeout(() => {
-                    this.highlightInformationRow(this.currentHighlightId);
-                }, 500);
-            }
-        });
-        
-        // Close highlight ketika klik di luar
-        $(document).on('click', (e) => {
-            if (!$(e.target).closest('.highlighted-row').length && !$(e.target).closest('.notification-item').length) {
-                this.removeAllHighlights();
-            }
-        });
+        if (day === 1) { // Hari Senin
+            console.log('📅 Today is Monday! Auto-reset notifications will happen on server');
+            
+            // Tampilkan pesan di console aja, reset dilakukan di server
+            console.log('🧹 Server will auto-reset old notifications today');
+            
+            // Tambah class CSS untuk badge Senin
+            $('.notification-bell').addClass('monday-indicator');
+        } else {
+            $('.notification-bell').removeClass('monday-indicator');
+        }
     }
     
     checkUrlForHighlight() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const highlightId = urlParams.get('highlight');
-        const notificationId = urlParams.get('notification_id');
-        
-        if (highlightId || notificationId) {
-            const idToHighlight = highlightId || notificationId;
-            console.log(`🔗 URL contains highlight parameter: ${idToHighlight}`);
-            
-            // Set timeout untuk menunggu halaman selesai load
-            setTimeout(() => {
-                this.highlightInformationRow(idToHighlight);
-                this.markAsRead(idToHighlight);
-                
-                // Clean URL tanpa refresh
-                const cleanUrl = window.location.pathname;
-                window.history.replaceState({}, document.title, cleanUrl);
-            }, 1500);
-        }
+        // Implementation if needed
     }
     
     startPollingImmediately() {
         console.log('🔔 Starting immediate polling...');
         
-        // Clear any existing intervals
         if (this.pollingInterval) clearInterval(this.pollingInterval);
         if (this.deepCheckInterval) clearInterval(this.deepCheckInterval);
         
-        // IMMEDIATE CHECK - lakukan sekarang juga
+        // IMMEDIATE CHECK
         setTimeout(() => {
             console.log('🔔 Executing immediate check...');
             this.checkNewNotifications(true);
         }, 500);
         
-        // Start regular polling every 3 seconds untuk real-time
+        // Regular polling every 5 seconds (increased from 3 to reduce load)
         this.pollingInterval = setInterval(() => {
             if (!this.pollingActive) {
                 this.pollingActive = true;
                 this.checkNewNotifications(false);
             }
-        }, 3000);
+        }, 5000);
         
-        // Deep check every 10 seconds
+        // Deep check every 15 seconds
         this.deepCheckInterval = setInterval(() => {
             if (!this.pollingActive) {
                 this.pollingActive = true;
                 this.checkNewNotifications(true);
             }
-        }, 10000);
+        }, 15000);
         
         console.log('🔔 Polling started successfully');
     }
@@ -177,12 +142,10 @@ class NotificationSystem {
     loadInitialData() {
         console.log('🔔 Loading initial data...');
         
-        // Check immediately
         setTimeout(() => {
             this.checkNewNotifications(true);
         }, 1000);
         
-        // Also check after 3 seconds to be sure
         setTimeout(() => {
             this.checkNewNotifications(true);
         }, 3000);
@@ -196,17 +159,13 @@ class NotificationSystem {
         
         this.pollingActive = true;
         const timestamp = new Date().getTime();
-        const checkId = Math.random().toString(36).substr(2, 9);
-        
-        console.log(`🔔 [${checkId}] Checking notifications (deep: ${isDeepCheck}) at`, new Date().toLocaleTimeString());
         
         $.ajax({
             url: 'api/check_new_info.php',
             type: 'GET',
             data: { 
                 _t: timestamp,
-                deep: isDeepCheck ? 1 : 0,
-                check_id: checkId
+                deep: isDeepCheck ? 1 : 0
             },
             dataType: 'json',
             cache: false,
@@ -215,78 +174,81 @@ class NotificationSystem {
                 'Pragma': 'no-cache',
                 'X-Requested-With': 'XMLHttpRequest'
             },
-            timeout: 8000,
+            timeout: 10000, // Increased timeout
             beforeSend: () => {
                 this.lastCheckTime = new Date();
-                console.log(`🔔 [${checkId}] Request sent at`, this.lastCheckTime.toLocaleTimeString());
             },
             success: (response) => {
-                console.log(`🔔 [${checkId}] Response received:`, {
+                console.log('🔔 Response received:', {
                     success: response.success,
                     count: response.count,
                     assigned: response.assigned_to_me,
-                    urgent: response.urgent_count,
-                    timestamp: response.timestamp
+                    urgent: response.urgent_count
                 });
+                
+                // ==================== CEK APAKAH ADA RESET MINGGUAN ====================
+                if (response.weekly_reset && response.weekly_reset.success) {
+                    console.log('🧹 Weekly notification reset executed:', response.weekly_reset.message);
+                    console.log(`🧹 Reset count: ${response.weekly_reset.reset_count} notifications`);
+                    
+                    // Update UI kalau perlu
+                    this.showToast('info', `Notifikasi minggu lalu diarsipkan (${response.weekly_reset.reset_count} notif)`);
+                    
+                    // Refresh notification dropdown
+                    this.loadNotifications();
+                    
+                    // Trigger event
+                    $(document).trigger('weeklyResetDone', [response.weekly_reset]);
+                }
                 
                 if (response.success) {
                     const newCount = parseInt(response.count) || 0;
                     const assignedCount = parseInt(response.assigned_to_me) || 0;
                     const urgentCount = parseInt(response.urgent_count) || 0;
                     
-                    // Reset retry count on success
                     this.retryCount = 0;
                     
-                    // ==================== REVISI: REAL-TIME NOTIFICATION TANPA AUDIO ====================
-                    // Jika ada notifikasi baru yang urgent, beri visual alert saja
+                    // Jika ada notifikasi baru yang urgent
                     if (urgentCount > 0 && newCount > 0 && newCount > this.notificationCount) {
-                        console.log(`🔔 [${checkId}] New urgent notification detected!`);
+                        console.log(`🔔 New urgent notification detected!`);
                         this.showUrgentNotification(urgentCount, newCount);
                     }
                     
-                    // ALWAYS update badge if count changed
+                    // Update badge if count changed
                     if (newCount !== this.notificationCount || isDeepCheck) {
-                        console.log(`🔔 [${checkId}] Count changed: ${this.notificationCount} → ${newCount}`);
+                        console.log(`🔔 Count changed: ${this.notificationCount} → ${newCount}`);
                         
                         this.notificationCount = newCount;
                         this.updateBadge(newCount);
                         
-                        // Show visual indicator untuk new notifications (TANPA AUDIO)
                         if (urgentCount > 0 && newCount > 0) {
-                            console.log(`🔔 [${checkId}] Urgent notifications found: ${urgentCount}`);
+                            console.log(`🔔 Urgent notifications found: ${urgentCount}`);
                             this.showNewNotificationIndicator();
                         }
                         
-                        // Auto-refresh notifications if dropdown is open
                         if ($('#notificationDropdown').hasClass('show')) {
-                            console.log(`🔔 [${checkId}] Dropdown is open, refreshing...`);
+                            console.log(`🔔 Dropdown is open, refreshing...`);
                             this.loadNotifications();
                         }
                         
-                        // Trigger custom event
                         $(document).trigger('notificationsUpdated', [newCount, urgentCount]);
                     }
                     
-                    // Update title badge juga
                     this.updateTitleBadge(newCount);
                     
                 } else {
-                    console.error(`🔔 [${checkId}] API returned error:`, response);
+                    console.error(`🔔 API returned error:`, response);
                 }
                 
                 this.pollingActive = false;
             },
             error: (xhr, status, error) => {
-                console.error(`🔔 [${checkId}] Polling error:`, {
-                    status: xhr.status,
-                    statusText: xhr.statusText,
-                    error: error
-                });
+                console.error(`🔔 Polling error:`, error, status);
                 
                 this.retryCount++;
                 
                 if (this.retryCount <= this.maxRetries) {
-                    console.log(`🔔 [${checkId}] Retrying... (${this.retryCount}/${this.maxRetries})`);
+                    console.log(`🔔 Retrying... (${this.retryCount}/${this.maxRetries})`);
                     
                     const retryDelay = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
                     
@@ -295,12 +257,11 @@ class NotificationSystem {
                         this.checkNewNotifications(true);
                     }, retryDelay);
                 } else {
-                    console.error(`🔔 [${checkId}] Max retries reached, stopping polling`);
+                    console.error(`🔔 Max retries reached, stopping polling`);
                     this.pollingActive = false;
                 }
             },
             complete: () => {
-                console.log(`🔔 [${checkId}] Check completed at`, new Date().toLocaleTimeString());
                 setTimeout(() => {
                     this.pollingActive = false;
                 }, 100);
@@ -309,17 +270,14 @@ class NotificationSystem {
     }
     
     showNewNotificationIndicator() {
-        console.log('🔔 Showing new notification indicator (visual only)...');
+        console.log('🔔 Showing new notification indicator...');
         
-        // Add animation to bell icon
         const $bell = $('.notification-bell');
         $bell.addClass('animate__animated animate__tada');
         
-        // Add pulse animation to badge
         const $badge = $('#notificationBadge');
         $badge.addClass('animate__animated animate__heartBeat');
         
-        // Remove animations after 2 seconds
         setTimeout(() => {
             $bell.removeClass('animate__animated animate__tada');
             $badge.removeClass('animate__animated animate__heartBeat');
@@ -327,25 +285,18 @@ class NotificationSystem {
     }
     
     showUrgentNotification(urgentCount, totalCount) {
-        // Visual indicator saja, tanpa audio
         const $badge = $('#notificationBadge');
         
-        // Add urgent animation
         $badge.addClass('animate__animated animate__pulse animate__infinite');
-        
-        // Change badge color to red
         $badge.removeClass('bg-danger bg-warning bg-primary')
                .addClass('bg-danger');
         
-        // Update document title
         document.title = `(${totalCount}) Progress BO Control - ${urgentCount} URGENT!`;
         
-        // Show visual toast
         this.showVisualToast(urgentCount, totalCount);
     }
     
     showVisualToast(urgentCount, totalCount) {
-        // Remove existing toasts
         $('.urgent-toast').remove();
         
         const toast = $(`
@@ -367,7 +318,6 @@ class NotificationSystem {
         
         setTimeout(() => toast.addClass('show'), 10);
         
-        // Auto remove after 5 seconds
         setTimeout(() => {
             toast.removeClass('show');
             setTimeout(() => toast.remove(), 300);
@@ -398,15 +348,18 @@ class NotificationSystem {
             success: (response) => {
                 console.log('🔔 Notifications loaded:', {
                     count: response.notifications?.length,
-                    unread: response.unread_count
+                    unread: response.unread_count,
+                    week_info: response.week_info
                 });
                 
                 if (response.success) {
                     this.renderNotifications(response.notifications, response.unread_count);
-                    
-                    // Update badge with actual unread count
                     this.updateBadge(response.unread_count);
                     
+                    // Update week info display jika ada
+                    if (response.week_info) {
+                        $('#weekInfoDisplay').text(response.week_info.display_text);
+                    }
                 } else {
                     this.showEmptyState('Gagal memuat notifikasi');
                 }
@@ -428,30 +381,39 @@ class NotificationSystem {
         
         let html = '';
         
-        // Group notifications by type untuk visual yang lebih baik
         const informationNotifs = notifications.filter(n => n.type === 'information');
         const delayNotifs = notifications.filter(n => n.type === 'delay');
         
-        // Group information notifications by user role
         const assignedNotifs = informationNotifs.filter(n => n.user_role === 'recipient');
         const viewerNotifs = informationNotifs.filter(n => n.user_role === 'viewer');
         
-        // Render assigned notifications first (most important)
         if (assignedNotifs.length > 0) {
             html += this.createNotificationGroup('DITUGASKAN UNTUK ANDA', assignedNotifs, 'warning');
         }
         
-        // Render other information notifications
         if (viewerNotifs.length > 0) {
             html += this.createNotificationGroup('INFORMASI UMUM', viewerNotifs, 'info');
         }
         
-        // Render delay notifications
         if (delayNotifs.length > 0) {
             html += this.createNotificationGroup('KETERLAMBATAN PENGIRIMAN', delayNotifs, 'danger');
         }
         
         container.html(html);
+        
+        // Bind click events
+        $('.notification-item').on('click', (e) => {
+            const $item = $(e.currentTarget);
+            const id = $item.data('id');
+            const type = $item.data('type');
+            const canReply = $item.data('can-reply');
+            const userRole = $item.data('user-role');
+            
+            console.log('🔔 Notification clicked:', { id, type, canReply, userRole });
+            
+            this.markAsRead(id);
+            this.scrollToRelatedInformation(id, type);
+        });
     }
     
     createNotificationGroup(title, notifications, color) {
@@ -484,20 +446,12 @@ class NotificationSystem {
     }
     
     createNotificationItem(notification, isUrgent = false) {
-        const iconMap = {
-            'information': 'bi-info-circle',
-            'delay': 'bi-clock',
-            'urgent': 'bi-exclamation-triangle',
-            'assigned_to_you': 'bi-person-check'
-        };
-        
         const isUnread = notification.is_unread || false;
         const timeAgo = this.getTimeAgo(notification.datetime_full);
         const displayMessage = notification.display_message || notification.message || '';
         const canReply = notification.can_reply || false;
         const userRole = notification.user_role || 'viewer';
         
-        // Icon warna berdasarkan role
         let iconColor = 'primary';
         let iconType = 'bi-info-circle';
         
@@ -509,7 +463,6 @@ class NotificationSystem {
             iconType = 'bi-clock';
         }
         
-        // Badge untuk role
         let roleBadge = '';
         if (userRole === 'recipient') {
             roleBadge = `<span class="badge bg-warning ms-2" style="font-size: 0.6rem;">UNTUK ANDA</span>`;
@@ -519,7 +472,6 @@ class NotificationSystem {
             roleBadge = `<span class="badge bg-secondary ms-2" style="font-size: 0.6rem;">INFO</span>`;
         }
         
-        // Badge untuk status reply
         let replyBadge = '';
         if (canReply) {
             replyBadge = `<span class="badge bg-success ms-1" style="font-size: 0.5rem;">BISA REPLY</span>`;
@@ -626,11 +578,13 @@ class NotificationSystem {
             success: (response) => {
                 if (response.success) {
                     console.log(`✅ Marked notification ${notificationId} as read`);
-                    // Remove unread class
                     $(`.notification-item[data-id="${notificationId}"]`).removeClass('unread');
-                    
-                    // Update badge count
                     this.checkNewNotifications(true);
+                    
+                    // Jika notifikasi lama, beri info
+                    if (response.is_old) {
+                        console.log('📅 This is an old notification');
+                    }
                 }
             },
             error: (xhr) => {
@@ -648,395 +602,102 @@ class NotificationSystem {
             if (id) notificationIds.push(id);
         });
         
-        if (notificationIds.length === 0) return;
+        if (notificationIds.length === 0) {
+            this.showToast('info', 'Tidak ada notifikasi yang belum dibaca');
+            return;
+        }
         
-        // Mark each as read
         notificationIds.forEach(id => {
             this.markAsRead(id);
         });
         
-        // Clear all unread styling
         $unreadItems.removeClass('unread');
         
-        // Show success message
         this.showToast('success', `Marked ${notificationIds.length} notifications as read`);
     }
     
-scrollToRelatedInformation(notificationId, notificationType) {
-    console.log(`🎯 INSTANT Scroll to information: ${notificationId}, type: ${notificationType}`);
-    
-    if (notificationType === 'information') {
-        // 1. TUTUP DROPDOWN SEKARANG JUGA (tanpa nunggu)
-        $('#notificationDropdown').dropdown('hide');
+    scrollToRelatedInformation(notificationId, notificationType) {
+        console.log(`🎯 Scroll to information: ${notificationId}, type: ${notificationType}`);
         
-        // 2. LANGSUNG SCROLL KE TABEL INFORMASI (tanpa delay)
-        const $informationSection = $('#information-section');
-        if ($informationSection.length) {
-            $('html, body').stop().animate({
-                scrollTop: $informationSection.offset().top - 80
-            }, 300); // SUPER FAST 300ms aja!
-        }
-        
-        // 3. LANGSUNG HIGHLIGHT ROW (tanpa nunggu)
-        setTimeout(() => {
-            this.instantHighlightRow(notificationId);
-        }, 50); // Cuma nunggu 50ms biar scroll dulu dikit
-        
-    } else if (notificationType === 'delay') {
-        // Untuk delay notifications - langsung tutup dropdown aja
-        $('#notificationDropdown').dropdown('hide');
-        this.showToast('info', 'Notification keterlambatan pengiriman');
-    }
-}
-
-instantHighlightRow(notificationId) {
-    console.log(`⚡ INSTANT Highlight row for: ${notificationId}`);
-    
-    // HAPUS SEMUA HIGHLIGHT LAMA
-    $('.highlighted-row').removeClass('highlighted-row');
-    
-    // CARI ROW DENGAN ID YANG COCOK
-    let foundRow = null;
-    
-    // Method 1: Cari berdasarkan data-id langsung
-    foundRow = $(`tr[data-id="${notificationId}"]`);
-    
-    // Method 2: Kalau ga ketemu, cari di semua row
-    if (!foundRow.length) {
-        $('#table-information tbody tr').each(function() {
-            const $row = $(this);
-            const rowId = $row.data('id');
-            const rowText = $row.text();
+        if (notificationType === 'information') {
+            $('#notificationDropdown').dropdown('hide');
             
-            // Cek apakah notificationId ada di dalam row
-            if (rowId == notificationId || 
-                rowText.includes(notificationId) ||
-                $row.find('.btn-edit-info[data-id="' + notificationId + '"]').length ||
-                $row.find('.btn-reply-info[data-id="' + notificationId + '"]').length) {
-                foundRow = $row;
-                return false; // Break loop
-            }
-        });
-    }
-    
-    // Method 3: Kalau masih ga ketemu, coba cari dari ID numerik aja
-    if (!foundRow.length && typeof notificationId === 'string') {
-        const numericId = notificationId.replace(/\D/g, '');
-        if (numericId) {
-            foundRow = $(`tr[data-id="${numericId}"]`);
-        }
-    }
-    
-    // JIKA KETEMU, APPLY HIGHLIGHT SUPER FAST
-    if (foundRow && foundRow.length) {
-        console.log(`✅ Found row instantly!`);
-        
-        // Apply highlight langsung
-        foundRow.addClass('highlighted-row animate__animated animate__pulse');
-        foundRow.css({
-            'border-left': '4px solid #ff0000',
-            'border-right': '4px solid #ff0000',
-            'background-color': 'rgba(255, 0, 0, 0.15)',
-            'box-shadow': '0 0 20px rgba(255, 0, 0, 0.4)'
-        });
-        
-        // SCROLL KE ROW TERSEBUT (lagi buat lebih akurat)
-        setTimeout(() => {
-            const rowPosition = foundRow.offset().top;
-            $('html, body').stop().animate({
-                scrollTop: rowPosition - 150
-            }, 200);
-            
-            // TAMBAH EFFECT BLINK UNTUK PERHATIAN EXTRA
-            foundRow.addClass('animate__flash');
-            setTimeout(() => {
-                foundRow.removeClass('animate__flash');
-            }, 1000);
-            
-        }, 100);
-        
-        // AUTO REMOVE HIGHLIGHT SETELAH 10 DETIK
-        setTimeout(() => {
-            foundRow.removeClass('highlighted-row animate__animated animate__pulse');
-            foundRow.css({
-                'border-left': '',
-                'border-right': '',
-                'background-color': '',
-                'box-shadow': ''
-            });
-        }, 10000);
-        
-    } else {
-        console.log(`❌ Row not found instantly, trying AJAX lookup...`);
-        // Fallback ke method lama kalau ga ketemu
-        this.lookupAndHighlight(notificationId);
-    }
-}
-
-lookupAndHighlight(notificationId) {
-    // AJAX cepat untuk dapetin data
-    $.ajax({
-        url: 'modules/data_information.php',
-        type: 'GET',
-        data: { type: 'get-single', id: notificationId },
-        dataType: 'json',
-        timeout: 2000, // Cuma 2 detik timeout
-        success: (response) => {
-            if (response.success && response.data) {
-                const info = response.data;
-                console.log('✅ Data found via AJAX:', info);
-                
-                // Cari row berdasarkan data yang didapat
-                this.findRowByInfoData(info);
-            } else {
-                this.showToast('warning', 'Data tidak ditemukan di sistem');
-            }
-        },
-        error: () => {
-            this.showToast('error', 'Gagal mengambil data');
-        }
-    });
-}
-
-findRowByInfoData(infoData) {
-    // Cari row berdasarkan PIC_FROM + ITEM + DATE (kombinasi unik)
-    $('#table-information tbody tr').each(function() {
-        const $row = $(this);
-        const rowPicFrom = $row.find('td').eq(3).text().trim();
-        const rowItem = $row.find('td').eq(4).text().trim();
-        const rowDate = $row.find('td').eq(1).text().trim();
-        
-        if (rowPicFrom === infoData.PIC_FROM && 
-            rowItem === infoData.ITEM && 
-            rowDate === infoData.DATE) {
-            
-            console.log(`✅ Found matching row by data!`);
-            
-            // Apply highlight
-            $row.addClass('highlighted-row animate__animated animate__pulse');
-            $row.css({
-                'border-left': '4px solid #ff0000',
-                'border-right': '4px solid #ff0000',
-                'background-color': 'rgba(255, 0, 0, 0.15)'
-            });
-            
-            // Scroll ke row
-            setTimeout(() => {
-                const rowPosition = $row.offset().top;
+            const $informationSection = $('#information-section');
+            if ($informationSection.length) {
                 $('html, body').stop().animate({
-                    scrollTop: rowPosition - 150
-                }, 200);
+                    scrollTop: $informationSection.offset().top - 80
+                }, 300);
+            }
+            
+            setTimeout(() => {
+                this.highlightInformationRow(notificationId);
             }, 50);
             
-            return false; // Break loop
+        } else if (notificationType === 'delay') {
+            $('#notificationDropdown').dropdown('hide');
+            this.showToast('info', 'Notification keterlambatan pengiriman');
         }
-    });
-}
+    }
     
     highlightInformationRow(notificationId) {
         console.log(`🎨 Highlighting row for notification ID: ${notificationId}`);
         
-        // Remove previous highlights
-        this.removeAllHighlights();
+        $('.highlighted-row').removeClass('highlighted-row');
         
-        // Reset current highlight ID
-        this.currentHighlightId = null;
+        let foundRow = null;
+        foundRow = $(`tr[data-id="${notificationId}"]`);
         
-        // Tunggu sebentar untuk memastikan DataTable sudah render
-        setTimeout(() => {
-            // Cari semua row di tabel informasi
-            const $allRows = $('#table-information tbody tr');
-            let found = false;
-            
-            console.log(`🔍 Searching in ${$allRows.length} rows for ID: ${notificationId}`);
-            
-            // Extract numeric ID dari notificationId
-            let searchId = notificationId;
-            if (typeof notificationId === 'string') {
-                const idMatch = notificationId.match(/\d+/);
-                if (idMatch) {
-                    searchId = idMatch[0];
-                }
-            }
-            
-            // Method 1: Cari berdasarkan data-id
-            $allRows.each((index, row) => {
-                const $row = $(row);
-                
-                // Dapatkan ID_INFORMATION dari row
+        if (!foundRow.length) {
+            $('#table-information tbody tr').each(function() {
+                const $row = $(this);
                 const rowId = $row.data('id');
-                const infoId = $row.find('td').eq(1).text(); // Kolom Date
-                const picFrom = $row.find('td').eq(3).text(); // Kolom PIC FROM
-                const item = $row.find('td').eq(4).text(); // Kolom Item
                 
-                // Debug log
-                console.log(`Row ${index}:`, {
-                    rowId: rowId,
-                    infoId: infoId,
-                    picFrom: picFrom,
-                    item: item
-                });
-                
-                // Check dengan beberapa kemungkinan
-                // Method 1: Cek apakah notificationId ada di data attribute
-                if (rowId == searchId || 
-                    $row.attr('id') === 'info-' + searchId ||
-                    infoId.toString().includes(searchId.toString())) {
-                    
-                    console.log(`✅ Found match at row ${index} by infoId`);
-                    found = true;
-                    this.applyRowHighlight($row);
-                    return false; // Break loop
-                }
-                
-                // Method 2: Coba cari berdasarkan PIC_FROM dan Item (jika notificationId adalah ID database)
-                if (picFrom && item) {
-                    const rowSignature = picFrom.toLowerCase() + '_' + item.toLowerCase().substring(0, 30);
-                    const notificationSignature = notificationId.toString().toLowerCase();
-                    
-                    if (rowSignature.includes(notificationSignature) || 
-                        notificationSignature.includes(rowSignature)) {
-                        
-                        console.log(`✅ Found match at row ${index} by signature`);
-                        found = true;
-                        this.applyRowHighlight($row);
-                        return false;
-                    }
+                if (rowId == notificationId || 
+                    $row.find('.btn-edit-info[data-id="' + notificationId + '"]').length ||
+                    $row.find('.btn-reply-info[data-id="' + notificationId + '"]').length) {
+                    foundRow = $row;
+                    return false;
                 }
             });
-            
-            // Method 3: Jika tidak ditemukan, coba cari dengan AJAX untuk data spesifik
-            if (!found) {
-                console.log(`⚠️ Row not found, trying AJAX lookup...`);
-                this.lookupInformationById(notificationId);
-            }
-        }, 500); // Delay untuk memastikan DataTable sudah selesai render
-    }
-    
-    applyRowHighlight($row) {
-        // Add highlight class
-        $row.addClass('highlighted-row animate__animated animate__pulse');
-        
-        // Add styling
-        $row.css({
-            'border-left': '4px solid #ffc107',
-            'border-right': '4px solid #ffc107',
-            'background-color': 'rgba(255, 193, 7, 0.15)',
-            'box-shadow': '0 0 15px rgba(255, 193, 7, 0.3)',
-            'position': 'relative'
-        });
-        
-        // Scroll ke row dengan smooth animation
-        setTimeout(() => {
-            const rowTop = $row.offset().top;
-            const windowHeight = $(window).height();
-            const scrollPosition = rowTop - (windowHeight / 3);
-            
-            $('html, body').stop().animate({
-                scrollTop: scrollPosition
-            }, 1000);
-            
-            // Tambah efek shake untuk perhatian
-            setTimeout(() => {
-                $row.addClass('animate__shakeX');
-                setTimeout(() => {
-                    $row.removeClass('animate__shakeX');
-                }, 1000);
-            }, 500);
-            
-        }, 300);
-        
-        // Auto remove highlight after 15 seconds
-        setTimeout(() => {
-            this.removeAllHighlights();
-        }, 15000);
-    }
-    
-    lookupInformationById(notificationId) {
-        // AJAX request untuk mendapatkan data spesifik
-        $.ajax({
-            url: 'modules/data_information.php',
-            type: 'GET',
-            data: {
-                type: 'get-single',
-                id: notificationId
-            },
-            dataType: 'json',
-            success: (response) => {
-                if (response.success && response.data) {
-                    const info = response.data;
-                    console.log('✅ Information found:', info);
-                    
-                    // Cari row berdasarkan data yang didapat
-                    this.findAndHighlightByInfoData(info);
-                } else {
-                    this.showToast('warning', 'Informasi tidak ditemukan');
-                }
-            },
-            error: () => {
-                this.showToast('error', 'Gagal mencari informasi');
-            }
-        });
-    }
-    
-    findAndHighlightByInfoData(infoData) {
-        const $allRows = $('#table-information tbody tr');
-        let found = false;
-        
-        $allRows.each((index, row) => {
-            const $row = $(row);
-            
-            // Bandingkan data row dengan infoData
-            const rowPicFrom = $row.find('td').eq(3).text().trim(); // PIC FROM
-            const rowItem = $row.find('td').eq(4).text().trim(); // ITEM
-            const rowDate = $row.find('td').eq(1).text().trim(); // DATE
-            
-            if (rowPicFrom === infoData.PIC_FROM && 
-                rowItem === infoData.ITEM && 
-                rowDate === infoData.DATE) {
-                
-                console.log(`✅ Found matching row by data comparison`);
-                found = true;
-                this.applyRowHighlight($row);
-                return false;
-            }
-        });
-        
-        if (!found) {
-            // Refresh table dan coba lagi
-            if (typeof fetchDataInformation === 'function') {
-                this.showToast('info', 'Memuat ulang data untuk menemukan informasi...');
-                fetchDataInformation();
-                
-                // Simpan data untuk highlight nanti
-                this.pendingHighlightData = infoData;
-                
-                // Listen untuk DataTable draw
-                $('#table-information').on('draw.dt', () => {
-                    setTimeout(() => {
-                        this.findAndHighlightByInfoData(this.pendingHighlightData);
-                        delete this.pendingHighlightData;
-                    }, 500);
-                });
-            }
         }
-    }
-    
-    removeAllHighlights() {
-        console.log('🗑️ Removing all highlights...');
         
-        $('.highlighted-row').each((index, row) => {
-            $(row).removeClass('highlighted-row animate__animated animate__pulse animate__shakeX');
-            $(row).css({
-                'border-left': '',
-                'border-right': '',
-                'background-color': '',
-                'box-shadow': ''
+        if (foundRow && foundRow.length) {
+            console.log(`✅ Found row!`);
+            
+            foundRow.addClass('highlighted-row animate__animated animate__pulse');
+            foundRow.css({
+                'border-left': '4px solid #ff0000',
+                'border-right': '4px solid #ff0000',
+                'background-color': 'rgba(255, 0, 0, 0.15)',
+                'box-shadow': '0 0 20px rgba(255, 0, 0, 0.4)'
             });
-        });
-        
-        this.highlightActive = false;
-        this.currentHighlightId = null;
+            
+            setTimeout(() => {
+                const rowPosition = foundRow.offset().top;
+                $('html, body').stop().animate({
+                    scrollTop: rowPosition - 150
+                }, 200);
+                
+                foundRow.addClass('animate__flash');
+                setTimeout(() => {
+                    foundRow.removeClass('animate__flash');
+                }, 1000);
+                
+            }, 100);
+            
+            setTimeout(() => {
+                foundRow.removeClass('highlighted-row animate__animated animate__pulse');
+                foundRow.css({
+                    'border-left': '',
+                    'border-right': '',
+                    'background-color': '',
+                    'box-shadow': ''
+                });
+            }, 10000);
+            
+        } else {
+            console.log(`❌ Row not found`);
+        }
     }
     
     showToast(type, message) {
@@ -1078,7 +739,6 @@ findRowByInfoData(infoData) {
         
         setTimeout(() => toast.addClass('show'), 10);
         
-        // Auto remove after 5 seconds
         setTimeout(() => {
             toast.removeClass('show');
             setTimeout(() => toast.remove(), 300);
@@ -1088,35 +748,60 @@ findRowByInfoData(infoData) {
     // Public method untuk force check
     forceCheck() {
         console.log('🔔 Force check called');
-        this.checkNewNotifications(true);
+        if (!this.pollingActive) {
+            this.checkNewNotifications(true);
+        } else {
+            console.log('🔔 Polling active, skipping force check');
+        }
     }
 }
 
-// Initialize on document ready
-$(document).ready(function() {
-    console.log('🔔 Initializing NotificationSystem...');
-    
-    if (!window.notificationSystem) {
-        window.notificationSystem = new NotificationSystem();
-        console.log('✅ NotificationSystem initialized');
-    }
-    
-    // Expose methods untuk global access
-    window.forceNotificationCheck = function() {
-        if (window.notificationSystem) {
-            window.notificationSystem.forceCheck();
+// Pastikan hanya satu instance yang dibuat
+if (typeof window.notificationSystem === 'undefined') {
+    $(document).ready(function() {
+        console.log('🔔 Initializing NotificationSystem (single instance)...');
+        
+        // Cek apakah sudah ada instance
+        if (!window.notificationSystem) {
+            window.notificationSystem = new NotificationSystem();
+            console.log('✅ NotificationSystem initialized');
         }
-    };
-    
-    window.highlightNotificationRow = function(notificationId) {
-        if (window.notificationSystem) {
-            window.notificationSystem.highlightInformationRow(notificationId);
+        
+        // Expose global functions
+        window.forceNotificationCheck = function() {
+            if (window.notificationSystem) {
+                window.notificationSystem.forceCheck();
+            }
+        };
+        
+        window.highlightNotificationRow = function(notificationId) {
+            if (window.notificationSystem) {
+                window.notificationSystem.highlightInformationRow(notificationId);
+            }
+        };
+        
+        // Tambah CSS untuk Monday indicator
+        if (!$('#notification-style').length) {
+            $('head').append(`
+                <style id="notification-style">
+                    .monday-indicator {
+                        animation: mondayPulse 2s infinite;
+                    }
+                    
+                    @keyframes mondayPulse {
+                        0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+                        70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+                        100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+                    }
+                    
+                    .weekly-reset-toast {
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                    }
+                </style>
+            `);
         }
-    };
-    
-    window.removeAllHighlights = function() {
-        if (window.notificationSystem) {
-            window.notificationSystem.removeAllHighlights();
-        }
-    };
-});
+    });
+} else {
+    console.log('🔔 NotificationSystem already exists, skipping initialization');
+}

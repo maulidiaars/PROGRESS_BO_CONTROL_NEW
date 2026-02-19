@@ -10,7 +10,7 @@ if (!$conn) {
 $date = $_GET['date'] ?? date('Ymd');
 
 try {
-    // TOTAL ORDER = ORD_QTY + ADD_DS + ADD_NS
+    // ✅ TOTAL ORDER = ORD_QTY + ADD_DS + ADD_NS (REGULER + ADD)
     $sqlOrder = "
     SELECT 
         ISNULL(SUM(ISNULL(ORD_QTY, 0) + ISNULL(ADD_DS, 0) + ISNULL(ADD_NS, 0)), 0) as total_order
@@ -19,53 +19,62 @@ try {
     ";
     
     $stmtOrder = sqlsrv_query($conn, $sqlOrder, [$date]);
-    if ($stmtOrder === false) throw new Exception('Order query failed');
     $rowOrder = sqlsrv_fetch_array($stmtOrder, SQLSRV_FETCH_ASSOC);
     $totalOrder = (int)($rowOrder['total_order'] ?? 0);
     sqlsrv_free_stmt($stmtOrder);
     
-    // TOTAL INCOMING
-    $sqlIncoming = "
-    SELECT ISNULL(SUM(TRAN_QTY), 0) as total_incoming
-    FROM T_UPDATE_BO 
-    WHERE DATE = ?
-    ";
+    // ✅ TOTAL INCOMING = PURE DARI BO, PAKAI LOGIKA SELISIH!
+    $sqlAll = "SELECT PART_NO, HOUR, TRAN_QTY FROM T_UPDATE_BO WHERE DATE = ? ORDER BY PART_NO, HOUR";
+    $stmtAll = sqlsrv_query($conn, $sqlAll, [$date]);
     
-    $stmtIncoming = sqlsrv_query($conn, $sqlIncoming, [$date]);
-    if ($stmtIncoming === false) throw new Exception('Incoming query failed');
-    $rowIncoming = sqlsrv_fetch_array($stmtIncoming, SQLSRV_FETCH_ASSOC);
-    $totalIncoming = (int)($rowIncoming['total_incoming'] ?? 0);
-    sqlsrv_free_stmt($stmtIncoming);
+    $allData = [];
+    $totalIncoming = 0;
+    $dsIncoming = 0;
     
-    // DS INCOMING
-    $sqlDS = "
-    SELECT ISNULL(SUM(TRAN_QTY), 0) as ds_incoming
-    FROM T_UPDATE_BO 
-    WHERE DATE = ? AND HOUR BETWEEN 7 AND 20
-    ";
-    $stmtDS = sqlsrv_query($conn, $sqlDS, [$date]);
-    $rowDS = $stmtDS ? sqlsrv_fetch_array($stmtDS, SQLSRV_FETCH_ASSOC) : ['ds_incoming' => 0];
-    $dsIncoming = (int)($rowDS['ds_incoming'] ?? 0);
-    if ($stmtDS) sqlsrv_free_stmt($stmtDS);
+    if ($stmtAll) {
+        while ($row = sqlsrv_fetch_array($stmtAll, SQLSRV_FETCH_ASSOC)) {
+            $partNo = $row['PART_NO'];
+            $hour = (int)$row['HOUR'];
+            $qty = (int)$row['TRAN_QTY'];
+            
+            if (!isset($allData[$partNo])) {
+                $allData[$partNo] = [];
+            }
+            $allData[$partNo][$hour] = $qty;
+        }
+        sqlsrv_free_stmt($stmtAll);
+    }
     
-    // NS INCOMING
-    $sqlNS = "
-    SELECT ISNULL(SUM(TRAN_QTY), 0) as ns_incoming
-    FROM T_UPDATE_BO 
-    WHERE DATE = ? AND (HOUR BETWEEN 21 AND 23 OR HOUR BETWEEN 0 AND 6)
-    ";
-    $stmtNS = sqlsrv_query($conn, $sqlNS, [$date]);
-    $rowNS = $stmtNS ? sqlsrv_fetch_array($stmtNS, SQLSRV_FETCH_ASSOC) : ['ns_incoming' => 0];
-    $nsIncoming = (int)($rowNS['ns_incoming'] ?? 0);
-    if ($stmtNS) sqlsrv_free_stmt($stmtNS);
+    // Hitung incremental per jam
+    foreach ($allData as $partNo => $hourData) {
+        $prevQty = 0;
+        $hours = array_keys($hourData);
+        sort($hours);
+        
+        foreach ($hours as $hour) {
+            $currentQty = $hourData[$hour];
+            $incoming = $currentQty - $prevQty;
+            $incoming = max(0, $incoming); // Jangan minus
+            
+            $totalIncoming += $incoming;
+            
+            // DS: jam 7-20
+            if ($hour >= 7 && $hour <= 20) {
+                $dsIncoming += $incoming;
+            }
+            
+            $prevQty = $currentQty;
+        }
+    }
     
+    $nsIncoming = $totalIncoming - $dsIncoming;
     $achievement = $totalOrder > 0 ? round(($totalIncoming / $totalOrder) * 100, 1) : 0;
     $balance = max($totalOrder - $totalIncoming, 0);
     
     echo json_encode([
         'date' => $date,
-        'total_order' => $totalOrder,
-        'total_incoming' => $totalIncoming,
+        'total_order' => $totalOrder,      // ✅ Termasuk ADD DS + ADD NS
+        'total_incoming' => $totalIncoming, // ✅ PURE dari BO
         'ds_incoming' => $dsIncoming,
         'ns_incoming' => $nsIncoming,
         'achievement' => $achievement,
@@ -74,13 +83,6 @@ try {
     ]);
     
 } catch (Exception $e) {
-    echo json_encode([
-        'error' => $e->getMessage(),
-        'date' => $date,
-        'total_order' => 0,
-        'total_incoming' => 0,
-        'achievement' => 0,
-        'balance' => 0
-    ]);
+    echo json_encode(['error' => $e->getMessage()]);
 }
 ?>

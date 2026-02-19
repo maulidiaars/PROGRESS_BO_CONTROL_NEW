@@ -1,4 +1,4 @@
-// assets/js/information.js - VERSION LENGKAP SATU FILE
+// assets/js/information.js - VERSION FINAL dengan AUTO REFRESH
 (function() {
     'use strict';
     
@@ -168,217 +168,281 @@
         }
         
         initDataTable() {
-            // Inisialisasi DataTable dengan konfigurasi lengkap
+            console.log('🚀 Initializing DataTable with FINAL fix...');
+            
             if ($.fn.DataTable.isDataTable('#table-information')) {
-                window.tableInformation = $('#table-information').DataTable();
-            } else {
-                window.tableInformation = $('#table-information').DataTable({
-                    pageLength: 10,
-                    autoWidth: true,
-                    aaSorting: [[0, "asc"]],
-                    bDestroy: true,
-                    scrollX: true,
-                    scrollCollapse: true,
-                    paging: true,
-                    searching: true,
-                    language: {
-                        processing: '<div class="spinner-border spinner-border-sm" role="status"></div> Loading...',
-                        emptyTable: 'No information available',
-                        zeroRecords: 'No matching records found',
-                        search: 'Search:',
-                        paginate: {
-                            first: 'First',
-                            last: 'Last',
-                            next: 'Next',
-                            previous: 'Previous'
+                $('#table-information').DataTable().destroy();
+                $('#table-information').empty();
+            }
+            
+            window.tableInformation = $('#table-information').DataTable({
+                pageLength: 10,
+                autoWidth: true,
+                aaSorting: [[0, "asc"]],
+                bDestroy: true,
+                scrollX: true,
+                scrollCollapse: true,
+                paging: true,
+                searching: true,
+                language: {
+                    processing: '<div class="spinner-border spinner-border-sm"></div> Loading...',
+                    emptyTable: 'No information available',
+                    zeroRecords: 'No matching records found',
+                    search: 'Search:',
+                    paginate: {
+                        first: 'First',
+                        last: 'Last',
+                        next: 'Next',
+                        previous: 'Previous'
+                    }
+                },
+                ajax: {
+                    url: 'modules/data_information.php',
+                    type: 'GET',
+                    data: function(d) {
+                        return {
+                            type: 'fetch',
+                            date1: $('#range-date1').val(),
+                            date2: $('#range-date2').val()
+                        };
+                    },
+                    dataSrc: function(json) {
+                        console.log('📦 Data received:', json);
+                        if (json.success && json.data) {
+                            return json.data;
+                        }
+                        return [];
+                    }
+                },
+                columns: [
+                    // Kolom 0: No
+                    { 
+                        data: null, 
+                        render: function(d,t,r,m) { 
+                            return m.row + 1; 
+                        }, 
+                        className: "text-center", 
+                        width: "50px" 
+                    },
+                    
+                    // Kolom 1: Date
+                    { 
+                        data: "DATE", 
+                        className: "text-center", 
+                        width: "100px",
+                        render: function(data) {
+                            return data || '-';
                         }
                     },
-                    columns: [
-                        { 
-                            title: "No", 
-                            data: null, 
-                            render: function(data, type, row, meta) {
-                                return meta.row + 1;
-                            },
-                            className: "text-center"
-                        },
-                        { 
-                            title: "Date", 
-                            data: "DATE", 
-                            className: "text-center"
-                        },
-                        { 
-                            title: "Time", 
-                            data: "TIME_FROM",
-                            className: "text-center" 
-                        },
-                        { 
-                            title: "PIC", 
-                            data: "PIC_FROM",
-                            className: "text-center"
-                        },
-                        { 
-                            title: "Item", 
-                            data: "ITEM", 
-                            className: "text-center",
-                            render: function(data) {
-                                return '<div class="table-text-center text-truncate" style="max-width: 200px;">' + (data || '-') + '</div>';
-                            }
-                        },
-                        { 
-                            title: "Request", 
-                            data: "REQUEST", 
-                            className: "text-center",
-                            render: function(data) {
-                                return '<div class="table-text-center text-truncate" style="max-width: 200px;">' + (data || '-') + '</div>';
-                            }
-                        },
-                        { 
-                            title: "Action", 
-                            data: null, 
-                            orderable: false, 
-                            searchable: false,
-                            className: "text-center",
-                            render: function(data, type, row) {
-                                const role = row.user_role || '';
-                                const status = row.STATUS || '';
-                                
-                                // Hanya sender yang bisa edit/delete
-                                if (role === 'sender') {
-                                    let buttons = '';
-                                    // Edit hanya jika status Open
-                                    if (status === 'Open') {
-                                        buttons += `<button class="btn btn-sm btn-warning btn-edit-info me-1 btn-action-table" 
-                                                    data-id="${row.ID_INFORMATION}" title="Edit">
-                                                    <i class="bi bi-pencil"></i>
-                                                  </button>`;
-                                    }
-                                    // Delete button
-                                    buttons += `<button class="btn btn-sm btn-danger btn-delete-info btn-action-table" 
-                                                    data-id="${row.ID_INFORMATION}" title="Delete">
-                                                    <i class="bi bi-trash"></i>
-                                                  </button>`;
-                                    return buttons;
-                                }
-                                return '-';
-                            }
-                        },
-                        { 
-                            title: "Time", 
-                            data: "TIME_TO",
-                            className: "text-center",
-                            render: function(data) {
-                                return data || '-';
-                            }
-                        },
-                        { 
-                            title: "PIC", 
-                            data: "PIC_TO",
-                            className: "text-center",
-                            render: function(data) {
-                                return data || '-';
-                            }
-                        },
-                        { 
-                            title: "Status", 
-                            data: "STATUS", 
-                            className: "text-center",
-                            render: function(data) {
-                                let badgeClass = 'bg-secondary';
-                                let displayText = data || '-';
-                                
-                                if (data === 'Open') {
-                                    badgeClass = 'bg-danger';
-                                    displayText = 'OPEN';
-                                } else if (data === 'On Progress') {
-                                    badgeClass = 'bg-warning';
-                                    displayText = 'ON PROGRESS';
-                                } else if (data === 'Closed') {
-                                    badgeClass = 'bg-success';
-                                    displayText = 'CLOSED';
-                                }
-                                
-                                return `<div class="status-container">
-                                    <span class="badge ${badgeClass} w-100 py-2">${displayText}</span>
-                                </div>`;
-                            }
-                        },
-                        { 
-                            title: "Remark", 
-                            data: "REMARK", 
-                            className: "text-center",
-                            render: function(data) {
-                                return '<div class="table-text-center">' + (data || '-') + '</div>';
-                            }
-                        },
-                        { 
-                            title: "Action", 
-                            data: null, 
-                            orderable: false, 
-                            searchable: false,
-                            className: "text-center",
-                            render: function(data, type, row) {
-                                const role = row.user_role || '';
-                                const status = row.STATUS || '';
-                                
-                                // Hanya recipient yang bisa reply
-                                if (role === 'recipient' && status !== 'Closed') {
-                                    let buttonText = '';
-                                    let buttonClass = '';
-                                    
-                                    if (status === 'Open') {
-                                        buttonText = '<i class="bi bi-reply"></i> Reply';
-                                        buttonClass = 'btn-success';
-                                    } else if (status === 'On Progress') {
-                                        buttonText = '<i class="bi bi-arrow-clockwise"></i> Update';
-                                        buttonClass = 'btn-info';
-                                    }
-                                    
-                                    return `<button class="btn btn-sm ${buttonClass} btn-reply-info" 
-                                              data-id="${row.ID_INFORMATION}" title="Update Status">
-                                              ${buttonText}
-                                            </button>`;
-                                }
-                                return '-';
-                            }
-                        }
-                    ],
-                    createdRow: function(row, data, dataIndex) {
-                        // Tambah data attributes untuk highlight
-                        $(row).attr({
-                            'data-id': data.ID_INFORMATION,
-                            'data-pic-from': data.PIC_FROM,
-                            'data-item': data.ITEM,
-                            'data-date': data.DATE
-                        });
-                        
-                        // Tambah class untuk unread
-                        if (data.IS_UNREAD == 1) {
-                            $(row).addClass('unread-row');
+                    
+                    // Kolom 2: Time From
+                    { 
+                        data: "TIME_FROM", 
+                        className: "text-center", 
+                        width: "70px",
+                        render: function(data) {
+                            return data || '-';
                         }
                     },
-                    drawCallback: function(settings) {
-                        console.log('🔄 DataTable draw callback');
-                        setTimeout(() => {
-                            if (window.informationSystem && window.informationSystem.bindTableEvents) {
-                                window.informationSystem.bindTableEvents();
-                                console.log('✅ Table events re-bound');
+                    
+                    // Kolom 3: PIC From
+                    { 
+                        data: "PIC_FROM", 
+                        className: "text-center", 
+                        width: "100px",
+                        render: function(data) {
+                            return data || '-';
+                        }
+                    },
+                    
+                    // Kolom 4: Item
+                    { 
+                        data: "ITEM", 
+                        className: "text-center", 
+                        render: function(data) {
+                            return '<div style="white-space: normal; word-wrap: break-word; max-width: 200px;">' + 
+                                   (data || '-') + '</div>';
+                        }
+                    },
+                    
+                    // Kolom 5: Request
+                    { 
+                        data: "REQUEST", 
+                        className: "text-center", 
+                        render: function(data) {
+                            return '<div style="white-space: normal; word-wrap: break-word; max-width: 250px;">' + 
+                                   (data || '-') + '</div>';
+                        }
+                    },
+                    
+                    // Kolom 6: Action Sender (EDIT & DELETE)
+                    { 
+                        data: null,
+                        orderable: false,
+                        searchable: false,
+                        className: "text-center",
+                        width: "100px",
+                        render: function(data, type, row) {
+                            if (row.user_role === 'sender') {
+                                let buttons = '';
+                                if (row.STATUS === 'Open') {
+                                    buttons += `<button class="btn btn-sm btn-warning btn-edit-info me-1" 
+                                                data-id="${row.ID_INFORMATION}" title="Edit">
+                                                <i class="bi bi-pencil"></i>
+                                              </button>`;
+                                }
+                                buttons += `<button class="btn btn-sm btn-danger btn-delete-info" 
+                                            data-id="${row.ID_INFORMATION}" title="Delete">
+                                            <i class="bi bi-trash"></i>
+                                          </button>`;
+                                return buttons;
+                            }
+                            return '-';
+                        }
+                    },
+                    
+                    // Kolom 7: Time To
+                    { 
+                        data: "TIME_TO", 
+                        className: "text-center", 
+                        width: "70px", 
+                        render: function(data) { 
+                            return data || '-'; 
+                        } 
+                    },
+                    
+                    // Kolom 8: PIC TO (BADGE)
+                    { 
+                        data: "PIC_TO",
+                        className: "text-center",
+                        render: function(data) {
+                            console.log("🎨 FINAL RENDER PIC_TO:", data);
+                            
+                            if (!data || data === '-' || data === 'null' || data === '') {
+                                return '<span class="text-muted">-</span>';
                             }
                             
-                            // Trigger event bahwa tabel sudah di-load
-                            $(document).trigger('informationTableLoaded', [settings.aoData]);
-                        }, 300);
+                            // Split berdasarkan koma
+                            var recipients = data.split(',').map(r => r.trim()).filter(r => r);
+                            
+                            if (recipients.length === 0) {
+                                return '<span class="text-muted">-</span>';
+                            }
+                            
+                            // Render badges
+                            var badges = '';
+                            recipients.forEach(function(r) {
+                                badges += '<span class="badge bg-primary me-1 mb-1" style="' +
+                                    'font-size:0.8rem; ' +
+                                    'padding:4px 8px; ' +
+                                    'border-radius:12px; ' +
+                                    'background: linear-gradient(135deg, #0d6efd, #0b5ed7);' +
+                                    '">' + 
+                                    '<i class="bi bi-person-circle me-1"></i>' + 
+                                    r + 
+                                    '</span>';
+                            });
+                            
+                            return '<div style="max-width:300px; display:flex; flex-wrap:wrap; gap:4px; justify-content:center;">' + 
+                                   badges + 
+                                   '</div>';
+                        }
                     },
-                    initComplete: function() {
-                        console.log('✅ Information DataTable initialized with proper columns');
-                        if (window.informationSystem) {
-                            setTimeout(() => {
-                                window.informationSystem.bindTableEvents();
-                            }, 500);
+                    
+                    // Kolom 9: Status
+                    { 
+                        data: "STATUS", 
+                        className: "text-center", 
+                        width: "110px",
+                        render: function(data) {
+                            let badgeClass = 'bg-secondary';
+                            let displayText = data || '-';
+                            
+                            if (data === 'Open') { 
+                                badgeClass = 'bg-danger'; 
+                                displayText = 'OPEN'; 
+                            }
+                            else if (data === 'On Progress') { 
+                                badgeClass = 'bg-warning'; 
+                                displayText = 'ON PROGRESS'; 
+                            }
+                            else if (data === 'Closed') { 
+                                badgeClass = 'bg-success'; 
+                                displayText = 'CLOSED'; 
+                            }
+                            
+                            return `<span class="badge ${badgeClass} w-100 py-2">${displayText}</span>`;
+                        }
+                    },
+                    
+                    // Kolom 10: Remark
+                    { 
+                        data: "REMARK", 
+                        className: "text-center", 
+                        render: function(data) {
+                            return '<div style="white-space: normal; word-wrap: break-word; max-width: 250px;">' + 
+                                   (data && data !== '-' ? data : '-') + 
+                                   '</div>';
+                        }
+                    },
+                    
+                    // Kolom 11: Action Recipient (REPLY & UPDATE)
+                    { 
+                        data: null,
+                        orderable: false,
+                        searchable: false,
+                        className: "text-center",
+                        width: "100px",
+                        render: function(data, type, row) {
+                            if (row.user_role === 'recipient' && row.STATUS !== 'Closed') {
+                                let buttonText = '';
+                                let buttonClass = '';
+                                
+                                if (row.STATUS === 'Open') {
+                                    buttonText = '<i class="bi bi-reply"></i> Reply';
+                                    buttonClass = 'btn-success';
+                                } else if (row.STATUS === 'On Progress') {
+                                    buttonText = '<i class="bi bi-arrow-clockwise"></i> Update';
+                                    buttonClass = 'btn-info';
+                                }
+                                
+                                return `<button class="btn btn-sm ${buttonClass} btn-reply-info" 
+                                          data-id="${row.ID_INFORMATION}">
+                                          ${buttonText}
+                                        </button>`;
+                            }
+                            return '-';
                         }
                     }
-                });
-            }
+                ],
+                drawCallback: function() {
+                    console.log('✅ Table redrawn with FINAL fix');
+                }
+            });
+            
+            console.log('✅ DataTable initialized with FINAL fix');
+        }
+        
+        // ========== FUNGSI AUTO REFRESH ==========
+        forceRefreshTable() {
+            console.log('🔄 FORCE REFRESHING TABLE...');
+            
+            setTimeout(() => {
+                if (window.tableInformation) {
+                    window.tableInformation.ajax.reload(function() {
+                        console.log('✅ Table refreshed after action');
+                        
+                        // Update notification badge juga
+                        this.checkNewNotifications();
+                        
+                        // Trigger event biar komponen lain tahu
+                        $(document).trigger('informationTableRefreshed');
+                    }, false);
+                } else {
+                    // Kalo table undefined, re-init
+                    this.initDataTable();
+                }
+            }, 500);
         }
         
         loadRecipients() {
@@ -516,6 +580,7 @@
             console.log('📋 Selected recipients:', this.selectedRecipients);
         }
         
+        // ========== CREATE ==========
         submitInformation() {
             const form = $('#addInformationForm')[0];
             const formData = new FormData(form);
@@ -582,11 +647,10 @@
                         $('#select-all-recipients').prop('checked', false);
                         $('#recipient-all').prop('checked', false);
                         
-                        // Refresh table and notifications after 2 seconds
+                        // ===== AUTO REFRESH =====
                         setTimeout(() => {
-                            this.refreshInformationTable();
-                            this.checkNewNotifications();
-                        }, 2000);
+                            this.forceRefreshTable();
+                        }, 1000);
                         
                     } else {
                         if (response.duplicate) {
@@ -621,6 +685,7 @@
             return false;
         }
         
+        // ========== EDIT ==========
         editInformation(id) {
             console.log('🔄 Opening edit modal for ID:', id);
             
@@ -670,6 +735,7 @@
             });
         }
         
+        // ========== UPDATE ==========
         updateInformation() {
             const form = $('#updateFromInformationForm')[0];
             const formData = new FormData(form);
@@ -714,10 +780,10 @@
                         
                         $('#modal-update-information-from').modal('hide');
                         
+                        // ===== AUTO REFRESH =====
                         setTimeout(() => {
-                            this.refreshInformationTable();
-                            this.checkNewNotifications();
-                        }, 2000);
+                            this.forceRefreshTable();
+                        }, 1000);
                         
                     } else {
                         this.showToast('error', 'Failed!', response.message || 'Failed to update information');
@@ -733,6 +799,7 @@
             return false;
         }
         
+        // ========== REPLY ==========
         replyInformationModal(id) {
             console.log('🔄 Opening reply modal for ID:', id);
             
@@ -746,7 +813,7 @@
                         const info = response.data;
                         
                         // Cek apakah user adalah salah satu penerima
-                        const recipients = info.PIC_TO ? info.PIC_TO.split(', ') : [];
+                        const recipients = info.PIC_TO ? info.PIC_TO.split(',').map(r => r.trim()) : [];
                         const isRecipient = recipients.includes(this.currentUser);
                         
                         if (!isRecipient) {
@@ -816,7 +883,6 @@
             
             // Update status display
             let statusBadge = '';
-            let statusColor = '';
             let statusText = '';
             
             switch(info.STATUS) {
@@ -850,6 +916,7 @@
             }, 100);
         }
         
+        // ========== DELETE ==========
         deleteInformation(id) {
             Swal.fire({
                 title: 'Delete Information?',
@@ -872,6 +939,7 @@
                             },
                             dataType: 'json',
                             success: (response) => {
+                                console.log("✅ Delete response:", response);
                                 resolve(response);
                             },
                             error: () => {
@@ -888,9 +956,9 @@
                     if (response && response.success) {
                         this.showToast('success', 'Deleted!', 'Information deleted successfully');
                         
+                        // ===== AUTO REFRESH =====
                         setTimeout(() => {
-                            this.refreshInformationTable();
-                            this.checkNewNotifications();
+                            this.forceRefreshTable();
                         }, 500);
                         
                     } else {
@@ -901,10 +969,7 @@
         }
         
         refreshInformationTable() {
-            // Panggil fungsi global refresh
-            if (typeof fetchDataInformation === 'function') {
-                fetchDataInformation();
-            }
+            this.forceRefreshTable();
         }
         
         showToast(type, title, message, duration = 3000) {

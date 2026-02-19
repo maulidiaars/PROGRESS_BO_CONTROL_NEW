@@ -2690,3 +2690,64 @@ tbody, td, tfoot, th, thead, tr {
 .table-order-row small {
     line-height: 1.2;
 }
+
+
+/* Tambahkan di bagian akhir custom-styles.css */
+
+/* ================= INFORMATION TABLE FIX ================= */
+/* Biar text gak kepotong */
+#table-information td {
+    white-space: normal !important;
+    word-wrap: break-word !important;
+    vertical-align: middle !important;
+}
+
+/* Kolom Item */
+#table-information td:nth-child(5) {
+    max-width: 250px;
+    min-width: 150px;
+}
+
+/* Kolom Request */
+#table-information td:nth-child(6) {
+    max-width: 300px;
+    min-width: 200px;
+}
+
+/* Kolom PIC To (badges) */
+#table-information td:nth-child(9) {
+    max-width: 250px;
+    min-width: 150px;
+}
+
+/* Kolom Remark */
+#table-information td:nth-child(11) {
+    max-width: 250px;
+    min-width: 150px;
+}
+
+/* Badge recipients */
+#table-information .badge.bg-info {
+    background-color: #17a2b8 !important;
+    color: white !important;
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: 12px;
+    margin: 2px;
+    display: inline-block;
+}
+
+/* Hover effect buat badge */
+#table-information .badge.bg-info:hover {
+    background-color: #138496 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+/* Container buat badges biar wrap */
+#table-information td:nth-child(9) div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+}

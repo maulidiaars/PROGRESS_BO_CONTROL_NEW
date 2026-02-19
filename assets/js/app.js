@@ -4439,231 +4439,6 @@ $(document).ready(function() {
         return show;
     });
     
-tableInformation = $('#table-information').DataTable({
-    pageLength: 10,
-    autoWidth: true,
-    aaSorting: [[0, "asc"]],
-    bDestroy: true,
-    scrollX: true,
-    scrollCollapse: true,
-    paging: true,
-    searching: true,
-    ajax: {
-        url: 'modules/data_information.php',
-        type: 'GET',
-        data: function(d) {
-            return {
-                type: 'fetch',
-                date1: $('#range-date1').val(),
-                date2: $('#range-date2').val()
-            };
-        }
-    },
-    columns: [
-        { 
-            title: "No", 
-            data: null,
-            render: function(data, type, row, meta) {
-                return meta.row + 1;
-            },
-            className: "text-center",
-            orderable: false
-        },
-        { 
-            title: "Date", 
-            data: "DATE",
-            className: "text-center"
-        },
-        { 
-            title: "Time", 
-            data: "TIME_FROM", // INI PERBAIKAN
-            className: "text-center" 
-        },
-        { 
-            title: "PIC", 
-            data: "PIC_FROM",
-            className: "text-center"
-        },
-        { 
-            title: "Item", 
-            data: "ITEM", 
-            className: "text-center",
-            render: function(data) {
-                return '<div class="table-text-center text-truncate" style="max-width: 200px;">' + (data || '-') + '</div>';
-            }
-        },
-        { 
-            title: "Request", 
-            data: "REQUEST", 
-            className: "text-center",
-            render: function(data) {
-                return '<div class="table-text-center text-truncate" style="max-width: 200px;">' + (data || '-') + '</div>';
-            }
-        },
-        { 
-            title: "Action", 
-            data: null, 
-            orderable: false, 
-            searchable: false,
-            className: "text-center",
-            render: function(data, type, row) {
-                const role = row.user_role || '';
-                const status = row.STATUS || '';
-                
-                // Hanya sender yang bisa edit/delete
-                if (role === 'sender') {
-                    let buttons = '';
-                    // Edit hanya jika status Open
-                    if (status === 'Open') {
-                        buttons += `<button class="btn btn-sm btn-warning btn-edit-info me-1 btn-action-table" 
-                                    data-id="${row.ID_INFORMATION}" title="Edit">
-                                    <i class="bi bi-pencil"></i>
-                                  </button>`;
-                    }
-                    // Delete button
-                    buttons += `<button class="btn btn-sm btn-danger btn-delete-info btn-action-table" 
-                                    data-id="${row.ID_INFORMATION}" title="Delete">
-                                    <i class="bi bi-trash"></i>
-                                  </button>`;
-                    return buttons;
-                }
-                return '-';
-            }
-        },
-        { 
-            title: "Time", 
-            data: "TIME_TO",
-            className: "text-center",
-            render: function(data) {
-                return data || '-';
-            }
-        },
-        { 
-            title: "PIC", 
-            data: null, // KOLOM 8 - Tidak ada data langsung
-            className: "text-center",
-            render: function(data, type, row) {
-                // PIC TO dihitung dari siapa yang membalas
-                if (row.STATUS === 'Closed' || row.STATUS === 'On Progress') {
-                    return row.PIC_TO || '-';
-                }
-                return '-';
-            }
-        },
-        { 
-            title: "Status", 
-            data: "STATUS", 
-            className: "text-center",
-            render: function(data, type, row) {
-                let badgeClass = 'bg-secondary';
-                let displayText = data || '-';
-                
-                if (data === 'Open') {
-                    badgeClass = 'bg-danger';
-                    displayText = 'OPEN';
-                } else if (data === 'On Progress') {
-                    badgeClass = 'bg-warning';
-                    displayText = 'ON PROGRESS';
-                } else if (data === 'Closed') {
-                    badgeClass = 'bg-success';
-                    displayText = 'CLOSED';
-                }
-                
-                return `<div class="status-container">
-                    <span class="badge ${badgeClass} w-100 py-2">${displayText}</span>
-                </div>`;
-            }
-        },
-        { 
-            title: "Remark", 
-            data: "REMARK", 
-            className: "text-center",
-            render: function(data) {
-                return '<div class="table-text-center">' + (data || '-') + '</div>';
-            }
-        },
-        { 
-            title: "Action", 
-            data: null, 
-            orderable: false, 
-            searchable: false,
-            className: "text-center",
-            render: function(data, type, row) {
-                const role = row.user_role || '';
-                const status = row.STATUS || '';
-                
-                // Hanya recipient yang bisa reply
-                if (role === 'recipient' && status !== 'Closed') {
-                    let buttonText = '';
-                    let buttonClass = '';
-                    
-                    if (status === 'Open') {
-                        buttonText = '<i class="bi bi-reply"></i> Reply';
-                        buttonClass = 'btn-success';
-                    } else if (status === 'On Progress') {
-                        buttonText = '<i class="bi bi-arrow-clockwise"></i> Update';
-                        buttonClass = 'btn-info';
-                    }
-                    
-                    return `<button class="btn btn-sm ${buttonClass} btn-reply-info" 
-                              data-id="${row.ID_INFORMATION}" title="Update Status">
-                              ${buttonText}
-                            </button>`;
-                }
-                return '-';
-            }
-        }
-    ],
-    createdRow: function(row, data, dataIndex) {
-        // Tambah data attributes untuk highlight
-        $(row).attr({
-            'data-id': data.ID_INFORMATION,
-            'data-pic-from': data.PIC_FROM,
-            'data-item': data.ITEM,
-            'data-date': data.DATE
-        });
-        
-        // Tambah class untuk unread
-        if (data.IS_UNREAD == 1) {
-            $(row).addClass('unread-row');
-        }
-    },
-    drawCallback: function(settings) {
-        console.log('🔄 DataTable draw callback');
-        setTimeout(() => {
-            if (window.informationSystem && window.informationSystem.bindTableEvents) {
-                window.informationSystem.bindTableEvents();
-                console.log('✅ Table events re-bound');
-            }
-        }, 300);
-    },
-    initComplete: function() {
-        console.log('✅ Information DataTable initialized with proper columns');
-        if (window.informationSystem) {
-            setTimeout(() => {
-                window.informationSystem.bindTableEvents();
-            }, 500);
-        }
-    },
-    error: function(xhr, error, thrown) {
-        console.error('❌ DataTables error:', {
-            xhr: xhr,
-            error: error,
-            thrown: thrown
-        });
-        
-        // Show user-friendly error
-        $('#table-information tbody').html(`
-            <tr>
-                <td colspan="12" class="text-center text-danger py-4">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    Error loading data. Please refresh the page.
-                    <br><small>${thrown || 'Unknown error'}</small>
-                </td>
-            </tr>
-        `);
-    }
-});
     
     tableByCycle = $('#table-by-cycle').DataTable({
         pageLength: 10,
@@ -5332,23 +5107,30 @@ $('#btn-reset-ns').on('click', function() {
         }
     }
 
-    // Trigger notification check ketika ada update informasi
-    $(document).ajaxSuccess(function(event, xhr, settings) {
-        if (settings.url && (
-            settings.url.includes('data_information.php') ||
-            settings.url.includes('update_add_order.php') ||
-            settings.url.includes('upload_data.php')
-        )) {
-            console.log('📡 Data updated, triggering notification check...');
+// Trigger notification check ketika ada update informasi
+$(document).ajaxSuccess(function(event, xhr, settings) {
+    if (settings.url && (
+        settings.url.includes('data_information.php') ||
+        settings.url.includes('update_add_order.php') ||
+        settings.url.includes('upload_data.php')
+    )) {
+        console.log('📡 Data updated, triggering notification check...');
+        
+        // Trigger notification check setelah 2 detik
+        setTimeout(() => {
+            if (window.notificationSystem && typeof window.notificationSystem.forceCheck === 'function') {
+                window.notificationSystem.forceCheck();
+            }
             
-            // Trigger notification check setelah 2 detik
-            setTimeout(() => {
-                if (window.notificationSystem && typeof window.notificationSystem.forceCheck === 'function') {
-                    window.notificationSystem.forceCheck();
-                }
-            }, 2000);
-        }
-    });
+            // ===== TAMBAH INI UNTUK REFRESH TABLE =====
+            if (window.tableInformation) {
+                console.log("🔄 Reloading information table...");
+                window.tableInformation.ajax.reload(null, false);
+            }
+            
+        }, 2000);
+    }
+});
 
     // Check notifications saat page menjadi visible
     document.addEventListener('visibilitychange', function() {

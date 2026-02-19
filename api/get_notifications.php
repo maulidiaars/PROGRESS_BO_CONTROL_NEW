@@ -1,4 +1,5 @@
 <?php
+// api/get_notifications.php - VERSION DENGAN FILTER MINGGU INI SAJA
 session_start();
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -40,17 +41,15 @@ if (!$conn) {
 }
 
 try {
-    // ==================== REVISI SIMPLE: SEMUA USER BISA LIHAT ====================
+    // ==================== NOTIFIKASI: HANYA MINGGU INI (PAKSA) ====================
     $sql = "
         SELECT 
             ti.ID_INFORMATION as id,
             'information' as type,
-            -- TITLE BERBEDA BERDASARKAN USER
             CASE 
                 WHEN ti.PIC_TO LIKE '%' + ? + '%' THEN 'DITUGASKAN UNTUK ANDA'
                 ELSE 'INFORMASI BARU'
             END as title,
-            -- MESSAGE BERBEDA BERDASARKAN USER
             CASE 
                 WHEN ti.PIC_TO LIKE '%' + ? + '%' THEN 
                     CONCAT('Anda ditugaskan: ', ti.ITEM, 
@@ -77,20 +76,18 @@ try {
                 ELSE 'info'
             END as badge_color,
             CONVERT(varchar(19), CAST(ti.DATE + ' ' + ti.TIME_FROM as datetime), 120) as datetime_full,
-            -- FLAG: apakah user ini penerima?
             CASE 
                 WHEN ti.PIC_TO LIKE '%' + ? + '%' THEN 'recipient'
                 ELSE 'viewer'
             END as user_role,
-            -- FLAG: apakah bisa reply? (hanya penerima dan status Open)
             CASE 
                 WHEN ti.PIC_TO LIKE '%' + ? + '%' AND ti.STATUS = 'Open' THEN 1
                 ELSE 0
             END as can_reply
             
         FROM T_INFORMATION ti
-        WHERE ti.DATE >= ?  -- FILTER: MULAI SENIN MINGGU INI
-        AND ti.DATE <= ?    -- FILTER: SAMPAI MINGGU MINGGU INI
+        WHERE ti.DATE >= ?  -- FILTER: MULAI SENIN MINGGU INI (PAKSA)
+        AND ti.DATE <= ?    -- FILTER: SAMPAI MINGGU MINGGU INI (PAKSA)
         AND ti.PIC_FROM != ?  -- FILTER: BUKAN DARI USER SENDIRI
         AND NOT EXISTS (
             SELECT 1 FROM user_notification_read unr 
@@ -107,7 +104,7 @@ try {
         $currentUser,  // badge_color
         $currentUser,  // user_role
         $currentUser,  // can_reply
-        $weekStart, $weekEnd,        // WHERE DATE
+        $weekStart, $weekEnd,        // WHERE DATE (PAKSA MINGGU INI)
         $currentUser,                // AND PIC_FROM != currentUser
         $currentUser                 // NOT EXISTS user_notification_read
     ];
@@ -131,11 +128,6 @@ try {
                 }
             }
             
-            // Filter: Hanya notifikasi dari minggu ini
-            if ($row['DATE'] < $weekStart || $row['DATE'] > $weekEnd) {
-                continue; // SKIP notifikasi dari minggu sebelumnya
-            }
-            
             // Set display message
             $row['display_message'] = $row['message'];
             
@@ -151,7 +143,7 @@ try {
         $response['debug']['sql_error'] = sqlsrv_errors();
     }
     
-    // ==================== DELAY NOTIFICATIONS ====================
+    // ==================== DELAY NOTIFICATIONS (TETAP PAKAI LOGIKA LAMA) ====================
     $supervisors = ['ALBERTO', 'EKO', 'EKA', 'MURSID', 'SATRIO'];
     
     if (in_array($currentUser, $supervisors)) {

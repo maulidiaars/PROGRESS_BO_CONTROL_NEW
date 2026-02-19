@@ -1,5 +1,5 @@
 <?php
-// api/check_new_info.php - REVISI UNTUK SISTEM MINGGUAN DAN SEMUA USER BISA LIHAT
+// api/check_new_info.php - REVISI UNTUK AUTO-RESET NOTIF TIAP SENIN
 session_start();
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -34,7 +34,25 @@ if (!$conn || !$currentUser) {
 }
 
 try {
-    // ==================== REVISI UTAMA: FILTER PER MINGGU ====================
+    // ==================== CEK APAKAH PERLU RESET NOTIF MINGGUAN ====================
+    // INI YANG PALING PENTING: SETIAP SENIN, RESET OTOMATIS
+    if (isMonday() && !($_SESSION['weekly_reset_done'] ?? false)) {
+        $resetInfo = resetOldNotifications($conn);
+        $response['weekly_reset'] = $resetInfo;
+        $response['debug']['weekly_reset_done'] = true;
+        $_SESSION['weekly_reset_done'] = true;
+        
+        // Log reset ke file untuk debugging
+        $logMsg = date('Y-m-d H:i:s') . " - Weekly reset executed: " . $resetInfo['reset_count'] . " notifications\n";
+        @file_put_contents(__DIR__ . '/../logs/weekly_reset.log', $logMsg, FILE_APPEND);
+    }
+    
+    // Kalau bukan Senin, reset flag
+    if (!isMonday()) {
+        $_SESSION['weekly_reset_done'] = false;
+    }
+    
+    // ==================== FILTER PER MINGGU UNTUK NOTIFIKASI ====================
     $weekInfo = getCurrentWeekInfo();
     $weekStart = $weekInfo['start_date'];
     $weekEnd = $weekInfo['end_date'];
@@ -46,11 +64,11 @@ try {
     ];
     
     // ==================== HITUNG INFORMASI MINGGU INI ====================
-    // QUERY: Hitung informasi dari minggu ini untuk SEMUA USER (kecuali dari user sendiri)
+    // QUERY: Hanya hitung informasi dari minggu ini untuk NOTIFIKASI
     $sql = "
         SELECT 
-            -- Count unread information untuk SEMUA USER (kecuali dari user sendiri)
-            SUM(CASE WHEN ti.PIC_FROM != ?  -- FILTER: BUKAN DARI USER SENDIRI
+            -- Count unread information untuk SEMUA USER (kecuali dari user sendiri) - HANYA MINGGU INI
+            SUM(CASE WHEN ti.PIC_FROM != ? 
                       AND (unr.read_at IS NULL OR unr.id IS NULL) 
                       AND ti.STATUS = 'Open'
                       AND ti.DATE >= ?
@@ -59,7 +77,7 @@ try {
             
             -- Count assigned to me (HANYA DARI USER LAIN, HANYA MINGGU INI)
             SUM(CASE WHEN ti.PIC_TO LIKE '%' + ? + '%' 
-                      AND ti.PIC_FROM != ?  -- FILTER: BUKAN DARI USER SENDIRI
+                      AND ti.PIC_FROM != ? 
                       AND ti.STATUS = 'Open'
                       AND ti.DATE >= ?
                       AND ti.DATE <= ?
@@ -67,7 +85,7 @@ try {
             
             -- Count urgent (assigned to me and open, HANYA DARI USER LAIN, HANYA MINGGU INI)
             SUM(CASE WHEN ti.PIC_TO LIKE '%' + ? + '%' 
-                      AND ti.PIC_FROM != ?  -- FILTER: BUKAN DARI USER SENDIRI
+                      AND ti.PIC_FROM != ? 
                       AND ti.STATUS = 'Open'
                       AND ti.DATE >= ?
                       AND ti.DATE <= ?
@@ -118,14 +136,7 @@ try {
         $response['debug']['sql_error'] = sqlsrv_errors();
     }
     
-    // ==================== CEK APAKAH PERLU RESET MINGGUAN ====================
-    if (isMonday() && !($_SESSION['weekly_reset_done'] ?? false)) {
-        $resetInfo = resetWeeklyView();
-        $response['weekly_reset'] = $resetInfo;
-        $response['debug']['weekly_reset_done'] = true;
-    }
-    
-    // ==================== DELAY NOTIFICATIONS ====================
+    // ==================== DELAY NOTIFICATIONS (TETAP PAKAI LOGIKA LAMA) ====================
     $supervisors = ['ALBERTO', 'EKO', 'EKA', 'MURSID', 'SATRIO'];
     
     if (in_array($currentUser, $supervisors)) {
@@ -180,7 +191,6 @@ try {
     echo json_encode($response);
 }
 
-// Close connection
 if ($conn) {
     sqlsrv_close($conn);
 }

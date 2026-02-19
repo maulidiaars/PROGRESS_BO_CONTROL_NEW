@@ -20,29 +20,29 @@
         
         <hr style="margin-top: -2px">
         
-<table class="table table-hover" id="table-information" style="width:100%">
-    <thead style="white-space: nowrap; text-align: center">
-        <tr>
-            <th rowspan="2">No</th>
-            <th rowspan="2">Date</th>
-            <th colspan="4">From</th>
-            <th rowspan="2">Action</th>
-            <th colspan="4">To</th>
-            <th rowspan="2">Action</th>
-        </tr>
-        <tr>
-            <th>Time</th>
-            <th>PIC</th>
-            <th>Item</th>
-            <th>Request</th>
-            <th>Time</th>
-            <th>PIC</th>
-            <th>Status</th>
-            <th>Remark</th>
-        </tr>
-    </thead>
-    <tbody></tbody>
-</table>
+        <table class="table table-hover" id="table-information" style="width:100%">
+          <thead style="white-space: nowrap; text-align: center">
+            <tr>
+              <th rowspan="2">No</th>
+              <th rowspan="2">Date</th>
+              <th colspan="4">From</th>
+              <th rowspan="2">Action</th>
+              <th colspan="4">To</th>
+              <th rowspan="2">Action</th>
+            </tr>
+            <tr>
+              <th>Time</th>
+              <th>PIC</th>
+              <th>Item</th>
+              <th>Request</th>
+              <th>Time</th>
+              <th>PIC</th>
+              <th>Status</th>
+              <th>Remark</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
   </div>
