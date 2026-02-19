@@ -1,5 +1,5 @@
 <!-- components/information-section.php -->
-<div class="row">
+<div class="row" id="information-section">  <!-- INI YANG DITAMBAH -->
   <div class="col-lg-12">
     <div class="card" style="box-shadow: 3px 3px 15px #ddf6f6;">
       <div class="card-body">

@@ -416,7 +416,6 @@ try {
         exit;
     }
     
-    // ========================= FETCH DATA - FIX DUAL MODE =========================
     else if ($type === "fetch") {
         
         $DATE1 = $_GET["date1"] ?? '';

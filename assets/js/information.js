@@ -261,7 +261,7 @@
                         className: "text-center", 
                         render: function(data) {
                             return '<div style="white-space: normal; word-wrap: break-word; max-width: 200px;">' + 
-                                   (data || '-') + '</div>';
+                                (data || '-') + '</div>';
                         }
                     },
                     
@@ -271,7 +271,7 @@
                         className: "text-center", 
                         render: function(data) {
                             return '<div style="white-space: normal; word-wrap: break-word; max-width: 250px;">' + 
-                                   (data || '-') + '</div>';
+                                (data || '-') + '</div>';
                         }
                     },
                     
@@ -289,12 +289,12 @@
                                     buttons += `<button class="btn btn-sm btn-warning btn-edit-info me-1" 
                                                 data-id="${row.ID_INFORMATION}" title="Edit">
                                                 <i class="bi bi-pencil"></i>
-                                              </button>`;
+                                            </button>`;
                                 }
                                 buttons += `<button class="btn btn-sm btn-danger btn-delete-info" 
                                             data-id="${row.ID_INFORMATION}" title="Delete">
                                             <i class="bi bi-trash"></i>
-                                          </button>`;
+                                        </button>`;
                                 return buttons;
                             }
                             return '-';
@@ -316,20 +316,16 @@
                         data: "PIC_TO",
                         className: "text-center",
                         render: function(data) {
-                            console.log("🎨 FINAL RENDER PIC_TO:", data);
-                            
                             if (!data || data === '-' || data === 'null' || data === '') {
                                 return '<span class="text-muted">-</span>';
                             }
                             
-                            // Split berdasarkan koma
                             var recipients = data.split(',').map(r => r.trim()).filter(r => r);
                             
                             if (recipients.length === 0) {
                                 return '<span class="text-muted">-</span>';
                             }
                             
-                            // Render badges
                             var badges = '';
                             recipients.forEach(function(r) {
                                 badges += '<span class="badge bg-primary me-1 mb-1" style="' +
@@ -344,8 +340,8 @@
                             });
                             
                             return '<div style="max-width:300px; display:flex; flex-wrap:wrap; gap:4px; justify-content:center;">' + 
-                                   badges + 
-                                   '</div>';
+                                badges + 
+                                '</div>';
                         }
                     },
                     
@@ -381,8 +377,8 @@
                         className: "text-center", 
                         render: function(data) {
                             return '<div style="white-space: normal; word-wrap: break-word; max-width: 250px;">' + 
-                                   (data && data !== '-' ? data : '-') + 
-                                   '</div>';
+                                (data && data !== '-' ? data : '-') + 
+                                '</div>';
                         }
                     },
                     
@@ -407,17 +403,47 @@
                                 }
                                 
                                 return `<button class="btn btn-sm ${buttonClass} btn-reply-info" 
-                                          data-id="${row.ID_INFORMATION}">
-                                          ${buttonText}
+                                        data-id="${row.ID_INFORMATION}">
+                                        ${buttonText}
                                         </button>`;
                             }
                             return '-';
                         }
                     }
                 ],
-                drawCallback: function() {
-                    console.log('✅ Table redrawn with FINAL fix');
+                
+                drawCallback: function(settings) {
+                    console.log('✅ Table redrawn - adding data-id attributes');
+                    
+                    // PASTIKAN tableInformation ADA
+                    if (window.tableInformation) {
+                        $('#table-information tbody tr').each(function() {
+                            try {
+                                const rowData = window.tableInformation.row(this).data();
+                                if (rowData && rowData.ID_INFORMATION) {
+                                    $(this).attr('data-id', rowData.ID_INFORMATION);
+                                }
+                            } catch (e) {
+                                console.log('⚠️ Error getting row data:', e);
+                                // Fallback: coba cari dari attribute data di element
+                                const idFromButton = $(this).find('.btn-edit-info').data('id') || 
+                                                    $(this).find('.btn-reply-info').data('id');
+                                if (idFromButton) {
+                                    $(this).attr('data-id', idFromButton);
+                                }
+                            }
+                        });
+                    } else {
+                        console.log('⚠️ tableInformation not available yet');
+                    }
+                    
+                    // Bind events ulang
+                    if (window.informationSystem && window.informationSystem.bindTableEvents) {
+                        window.informationSystem.bindTableEvents();
+                    }
                 }
+                // ========== END TAMBAHAN ==========
+                
             });
             
             console.log('✅ DataTable initialized with FINAL fix');

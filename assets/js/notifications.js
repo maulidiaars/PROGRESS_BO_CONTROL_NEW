@@ -46,6 +46,9 @@ class NotificationSystem {
         // Cek apakah hari ini Senin (client-side)
         this.checkIfMonday();
         
+        // TAMBAH CSS UNTUK HIGHLIGHT
+        this.addHighlightStyles();
+        
         this.isInitialized = true;
     }
     
@@ -567,6 +570,7 @@ class NotificationSystem {
         }
     }
     
+    // ========== YANG DIUBAH: FUNGSI MARK AS READ ==========
     markAsRead(notificationId) {
         if (!notificationId) return;
         
@@ -578,8 +582,20 @@ class NotificationSystem {
             success: (response) => {
                 if (response.success) {
                     console.log(`✅ Marked notification ${notificationId} as read`);
+                    
+                    // Hilangkan class unread di UI
                     $(`.notification-item[data-id="${notificationId}"]`).removeClass('unread');
-                    this.checkNewNotifications(true);
+                    
+                    // ===== KURANGI COUNT =====
+                    if (this.notificationCount > 0) {
+                        this.notificationCount--;
+                        this.updateBadge(this.notificationCount);
+                        this.updateTitleBadge(this.notificationCount);
+                        console.log(`🔔 Count sekarang: ${this.notificationCount}`);
+                    }
+                    
+                    // Trigger event biar komponen lain tahu
+                    $(document).trigger('notificationRead', [notificationId, this.notificationCount]);
                     
                     // Jika notifikasi lama, beri info
                     if (response.is_old) {
@@ -616,87 +632,155 @@ class NotificationSystem {
         this.showToast('success', `Marked ${notificationIds.length} notifications as read`);
     }
     
+    // ========== YANG DIUBAH: FUNGSI SCROLL ==========
     scrollToRelatedInformation(notificationId, notificationType) {
-        console.log(`🎯 Scroll to information: ${notificationId}, type: ${notificationType}`);
+        console.log('🔔 NOTIFICATION CLICKED:', notificationId, notificationType);
         
-        if (notificationType === 'information') {
-            $('#notificationDropdown').dropdown('hide');
-            
-            const $informationSection = $('#information-section');
-            if ($informationSection.length) {
-                $('html, body').stop().animate({
-                    scrollTop: $informationSection.offset().top - 80
-                }, 300);
-            }
-            
-            setTimeout(() => {
-                this.highlightInformationRow(notificationId);
-            }, 50);
-            
-        } else if (notificationType === 'delay') {
-            $('#notificationDropdown').dropdown('hide');
-            this.showToast('info', 'Notification keterlambatan pengiriman');
+        if (notificationType !== 'information') return;
+        
+        // Tutup dropdown notifikasi
+        $('#notificationDropdown').dropdown('hide');
+        
+        // CARI SECTION INFORMASI (udah ditambahin ID)
+        const $targetSection = $('#information-section');
+        
+        if ($targetSection.length === 0) {
+            console.log('❌ Section informasi tidak ditemukan');
+            alert('Section informasi tidak ditemukan! Cek ID element');
+            return;
         }
+        
+        console.log('✅ Section ditemukan, posisi Y:', $targetSection.offset().top);
+        
+        // SCROLL KE SECTION (SMOOTH)
+        $('html, body').stop().animate({
+            scrollTop: $targetSection.offset().top - 100
+        }, 800, 'swing', function() {
+            console.log('✅ Scroll selesai');
+            
+            // CARI ROW YANG DITUJU
+            setTimeout(() => {
+                window.notificationSystem.highlightInformationRow(notificationId);
+            }, 300);
+        });
     }
     
+    // ================= FUNGSI HIGHLIGHT - VERSI BARU =================
     highlightInformationRow(notificationId) {
-        console.log(`🎨 Highlighting row for notification ID: ${notificationId}`);
+        console.log('🎨 Mencari row dengan ID:', notificationId);
         
-        $('.highlighted-row').removeClass('highlighted-row');
+        // Hapus highlight sebelumnya
+        $('.info-highlight').removeClass('info-highlight');
         
-        let foundRow = null;
-        foundRow = $(`tr[data-id="${notificationId}"]`);
+        let $targetRow = null;
         
-        if (!foundRow.length) {
+        // Cari berdasarkan data-id di row
+        $targetRow = $(`#table-information tbody tr[data-id="${notificationId}"]`);
+        
+        // Kalau tidak ketemu, cari berdasarkan button
+        if (!$targetRow || $targetRow.length === 0) {
             $('#table-information tbody tr').each(function() {
                 const $row = $(this);
-                const rowId = $row.data('id');
                 
-                if (rowId == notificationId || 
-                    $row.find('.btn-edit-info[data-id="' + notificationId + '"]').length ||
-                    $row.find('.btn-reply-info[data-id="' + notificationId + '"]').length) {
-                    foundRow = $row;
+                // Cek di button edit
+                if ($row.find(`.btn-edit-info[data-id="${notificationId}"]`).length) {
+                    $targetRow = $row;
+                    return false;
+                }
+                
+                // Cek di button reply
+                if ($row.find(`.btn-reply-info[data-id="${notificationId}"]`).length) {
+                    $targetRow = $row;
+                    return false;
+                }
+                
+                // Cek di data-id langsung
+                if ($row.attr('data-id') == notificationId) {
+                    $targetRow = $row;
                     return false;
                 }
             });
         }
         
-        if (foundRow && foundRow.length) {
-            console.log(`✅ Found row!`);
+        if ($targetRow && $targetRow.length) {
+            console.log('✅ Row ditemukan!');
             
-            foundRow.addClass('highlighted-row animate__animated animate__pulse');
-            foundRow.css({
-                'border-left': '4px solid #ff0000',
-                'border-right': '4px solid #ff0000',
-                'background-color': 'rgba(255, 0, 0, 0.15)',
-                'box-shadow': '0 0 20px rgba(255, 0, 0, 0.4)'
+            // HIGHLIGHT SEDERHANA
+            $targetRow.addClass('info-highlight').css({
+                'background-color': '#fff3cd',
+                'transition': 'background-color 0.5s ease',
+                'border-left': '4px solid #ffc107'
             });
             
-            setTimeout(() => {
-                const rowPosition = foundRow.offset().top;
-                $('html, body').stop().animate({
-                    scrollTop: rowPosition - 150
-                }, 200);
-                
-                foundRow.addClass('animate__flash');
-                setTimeout(() => {
-                    foundRow.removeClass('animate__flash');
-                }, 1000);
-                
-            }, 100);
+            // SCROLL KE ROW
+            $('html, body').stop().animate({
+                scrollTop: $targetRow.offset().top - 150
+            }, 600, function() {
+                console.log('✅ Scroll ke row selesai');
+            });
             
+            // HILANGIN HIGHLIGHT SETELAH 5 DETIK
             setTimeout(() => {
-                foundRow.removeClass('highlighted-row animate__animated animate__pulse');
-                foundRow.css({
-                    'border-left': '',
-                    'border-right': '',
+                $targetRow.css({
                     'background-color': '',
-                    'box-shadow': ''
-                });
-            }, 10000);
+                    'border-left': ''
+                }).removeClass('info-highlight');
+            }, 5000);
             
         } else {
-            console.log(`❌ Row not found`);
+            console.log('❌ Row tidak ditemukan untuk ID:', notificationId);
+            
+            // Coba cek apakah ada data di table
+            if (window.tableInformation) {
+                console.log('🔄 Coba reload table...');
+                window.tableInformation.ajax.reload(() => {
+                    setTimeout(() => {
+                        // Coba lagi setelah reload
+                        const $retryRow = $(`#table-information tbody tr[data-id="${notificationId}"]`);
+                        if ($retryRow.length) {
+                            $retryRow.addClass('info-highlight').css({
+                                'background-color': '#fff3cd',
+                                'border-left': '4px solid #ffc107'
+                            });
+                            $('html, body').animate({
+                                scrollTop: $retryRow.offset().top - 150
+                            }, 600);
+                        } else {
+                            console.log('❌ Tetap tidak ditemukan setelah reload');
+                            this.showToast('warning', 'Informasi tidak ditemukan di tabel');
+                        }
+                    }, 500);
+                }, false);
+            }
+        }
+    }
+    
+    // ================= FUNGSI TAMBAHAN =================
+    addHighlightStyles() {
+        if (!$('#notification-highlight-styles').length) {
+            $('head').append(`
+                <style id="notification-highlight-styles">
+                    .info-highlight {
+                        animation: gentlePulse 2s ease-in-out !important;
+                    }
+                    
+                    @keyframes gentlePulse {
+                        0% { background-color: #fff3cd; }
+                        50% { background-color: #ffe69c; }
+                        100% { background-color: #fff3cd; }
+                    }
+                    
+                    .info-highlight td {
+                        background-color: transparent !important;
+                    }
+                    
+                    .info-highlight {
+                        background-color: #fff3cd !important;
+                        border-left: 4px solid #ffc107 !important;
+                        transition: all 0.3s ease;
+                    }
+                </style>
+            `);
         }
     }
     

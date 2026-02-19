@@ -2751,3 +2751,24 @@ tbody, td, tfoot, th, thead, tr {
     gap: 4px;
     justify-content: center;
 }
+
+/* ================= NOTIFICATION HIGHLIGHT - SIMPLE ================= */
+.info-highlight {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+    transition: all 0.3s ease;
+}
+
+.info-highlight td {
+    background-color: transparent !important;
+}
+
+/* Hilangin semua highlight lama */
+.highlighted-row,
+.highlight-elegant,
+.highlighted-blue {
+    animation: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+}
